@@ -99,83 +99,128 @@ function createBackup($backup_dir) {
 function downloadUpdate($download_url, $update_dir, $version) {
     $zip_path = $update_dir . 'update_' . $version . '.zip';
     
-    // Check if it's a GitHub release URL
-    if (preg_match('/github\.com\/([^\/]+)\/([^\/]+)\/releases/i', $download_url, $matches)) {
+    // Check if it's a GitHub repository URL (releases or main branch)
+    // Remove trailing slash and clean URL
+    $download_url = rtrim($download_url, '/');
+    
+    if (preg_match('/github\.com\/([^\/]+)\/([^\/\?]+)/i', $download_url, $matches)) {
         $owner = $matches[1];
         $repo = $matches[2];
+        // Remove any query parameters or fragments from repo name
+        $repo = preg_replace('/[?#].*$/', '', $repo);
         
-        // Extract tag/version from URL or use provided version
-        $tag = $version;
-        if (preg_match('/tag\/([^\/\?]+)/i', $download_url, $tag_matches)) {
-            $tag = $tag_matches[1];
-        }
-        
-        // GitHub API: Get latest release asset
-        $github_api_url = "https://api.github.com/repos/$owner/$repo/releases/latest";
-        if ($tag && $tag !== 'latest') {
-            $github_api_url = "https://api.github.com/repos/$owner/$repo/releases/tags/$tag";
-        }
-        
-        logMessage("Fetching GitHub release info from: $github_api_url");
-        
-        $ch = curl_init($github_api_url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_USERAGENT, 'MusicPlatform-Update-System/1.0');
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        
-        $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        
-        if ($http_code !== 200) {
-            throw new Exception('Failed to fetch GitHub release info (HTTP ' . $http_code . ')');
-        }
-        
-        $release_data = json_decode($response, true);
-        if (!$release_data || empty($release_data['assets'])) {
-            throw new Exception('No release assets found on GitHub');
-        }
-        
-        // Find ZIP asset
-        $zip_asset = null;
-        foreach ($release_data['assets'] as $asset) {
-            if (preg_match('/\.zip$/i', $asset['browser_download_url'])) {
-                $zip_asset = $asset;
-                break;
+        // Check if it's a releases URL
+        if (preg_match('/\/releases/i', $download_url)) {
+            // Try to get release assets first
+            $tag = $version;
+            if (preg_match('/tag\/([^\/\?]+)/i', $download_url, $tag_matches)) {
+                $tag = $tag_matches[1];
+            }
+            
+            // GitHub API: Get latest release asset
+            $github_api_url = "https://api.github.com/repos/$owner/$repo/releases/latest";
+            if ($tag && $tag !== 'latest' && $tag !== $version) {
+                $github_api_url = "https://api.github.com/repos/$owner/$repo/releases/tags/$tag";
+            }
+            
+            logMessage("Fetching GitHub release info from: $github_api_url");
+            
+            $ch = curl_init($github_api_url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'MusicPlatform-Update-System/1.0');
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            
+            if ($http_code === 200) {
+                $release_data = json_decode($response, true);
+                if ($release_data && !empty($release_data['assets'])) {
+                    // Find ZIP asset
+                    $zip_asset = null;
+                    foreach ($release_data['assets'] as $asset) {
+                        if (preg_match('/\.zip$/i', $asset['browser_download_url'])) {
+                            $zip_asset = $asset;
+                            break;
+                        }
+                    }
+                    
+                    if ($zip_asset) {
+                        $download_url = $zip_asset['browser_download_url'];
+                        logMessage("Downloading from GitHub release: $download_url");
+                    }
+                }
+            }
+            
+            // If no release assets found, fall through to download repository ZIP
+            if (!isset($zip_asset)) {
+                logMessage("No release assets found, downloading repository ZIP instead");
             }
         }
         
-        if (!$zip_asset) {
-            throw new Exception('No ZIP file found in GitHub release assets');
+        // If no release assets or not a releases URL, download repository as ZIP
+        if (!isset($zip_asset)) {
+            // Try to determine branch (default to main)
+            $branch = 'main';
+            if (preg_match('/tree\/([^\/\?]+)/i', $download_url, $branch_matches)) {
+                $branch = $branch_matches[1];
+            }
+            
+            // Download repository as ZIP from branch
+            // GitHub provides ZIP downloads at: https://github.com/owner/repo/archive/refs/heads/branch.zip
+            $download_url = "https://github.com/$owner/$repo/archive/refs/heads/$branch.zip";
+            logMessage("Downloading GitHub repository ZIP from: $download_url");
         }
-        
-        $download_url = $zip_asset['browser_download_url'];
-        logMessage("Downloading from GitHub: $download_url");
     }
     
-    // Check if it's a cPanel/local file path
-    if (strpos($download_url, '/') === 0 || strpos($download_url, '../') === 0 || strpos($download_url, './') === 0) {
+    // Check if it's a cPanel file manager URL - extract the directory path
+    if (preg_match('/filemanager.*[?&]dir=([^&#]+)/i', $download_url, $cpanel_matches)) {
+        $cpanel_dir = urldecode($cpanel_matches[1]);
+        logMessage("Detected cPanel file manager URL. Directory: $cpanel_dir");
+        throw new Exception('cPanel file manager URLs are not supported. Please use one of these options: 1) Direct file path: ' . $cpanel_dir . '/update-v1.1.0.zip, 2) Web-accessible URL: https://gospelkingz.com/updates/update-v1.1.0.zip, or 3) See UPDATE_SOURCES.md for setup instructions.');
+    }
+    
+    // Check if it's a cPanel/local file path (absolute path starting with /)
+    if (strpos($download_url, '/') === 0 && !preg_match('/^https?:\/\//i', $download_url)) {
         // It's a local file path (cPanel file manager path)
-        $local_path = realpath($download_url);
+        $local_path = $download_url;
         
-        if (!$local_path || !file_exists($local_path)) {
-            // Try relative to document root
-            $doc_root = $_SERVER['DOCUMENT_ROOT'] ?? __DIR__ . '/../../';
-            $local_path = realpath($doc_root . '/' . ltrim($download_url, '/'));
+        // Try to resolve the path
+        if (!file_exists($local_path)) {
+            // Try with realpath
+            $local_path = realpath($local_path) ?: $download_url;
         }
         
-        if (!$local_path || !file_exists($local_path)) {
-            throw new Exception('Local file not found: ' . $download_url);
+        // If still not found, try relative to common server paths
+        if (!file_exists($local_path)) {
+            $possible_paths = [
+                $local_path,
+                $_SERVER['DOCUMENT_ROOT'] . $download_url,
+                dirname($_SERVER['DOCUMENT_ROOT']) . $download_url,
+                '/home/' . get_current_user() . $download_url
+            ];
+            
+            foreach ($possible_paths as $try_path) {
+                if (file_exists($try_path)) {
+                    $local_path = $try_path;
+                    break;
+                }
+            }
+        }
+        
+        if (!file_exists($local_path)) {
+            throw new Exception('Local file not found: ' . $download_url . '. Please verify the file path or make the file web-accessible via HTTP.');
         }
         
         if (!is_readable($local_path)) {
-            throw new Exception('Local file is not readable: ' . $local_path);
+            throw new Exception('Local file is not readable: ' . $local_path . '. Please check file permissions.');
         }
         
         // Copy local file to update directory
         if (!copy($local_path, $zip_path)) {
-            throw new Exception('Failed to copy local file to update directory');
+            throw new Exception('Failed to copy local file to update directory. Please check write permissions.');
         }
         
         logMessage("Copied local file: $local_path -> $zip_path");
@@ -191,32 +236,81 @@ function downloadUpdate($download_url, $update_dir, $version) {
         ];
     }
     
+    // Validate download URL before proceeding (for HTTP/HTTPS URLs)
+    if (!empty($download_url) && !filter_var($download_url, FILTER_VALIDATE_URL) && !preg_match('/^\/|^\.\.\//', $download_url)) {
+        throw new Exception('Invalid download URL: ' . $download_url);
+    }
+    
     // Regular HTTP/HTTPS download
+    logMessage("Starting download from: $download_url");
+    
     $ch = curl_init($download_url);
     $fp = fopen($zip_path, 'w');
+    
+    if (!$fp) {
+        throw new Exception('Cannot create ZIP file: ' . $zip_path);
+    }
     
     curl_setopt($ch, CURLOPT_FILE, $fp);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 300); // 5 minutes
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     curl_setopt($ch, CURLOPT_USERAGENT, 'MusicPlatform-Update-System/1.0');
+    curl_setopt($ch, CURLOPT_VERBOSE, false);
     
     $success = curl_exec($ch);
     $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $content_type = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+    $downloaded_size = curl_getinfo($ch, CURLINFO_SIZE_DOWNLOAD);
     $error = curl_error($ch);
     curl_close($ch);
     fclose($fp);
+    
+    logMessage("Download completed. HTTP: $http_code, Size: $downloaded_size bytes, Content-Type: $content_type");
     
     if (!$success || $http_code !== 200) {
         if (file_exists($zip_path)) {
             unlink($zip_path);
         }
-        throw new Exception('Download failed: ' . ($error ?: "HTTP $http_code"));
+        $error_msg = $error ?: "HTTP $http_code";
+        if ($http_code === 404) {
+            $error_msg .= " - File not found. Please check the URL.";
+        } elseif ($http_code === 403) {
+            $error_msg .= " - Access forbidden. Repository may be private or rate-limited.";
+        }
+        throw new Exception('Download failed: ' . $error_msg);
     }
     
-    if (!file_exists($zip_path) || filesize($zip_path) < 1000) {
-        throw new Exception('Downloaded file is invalid or too small');
+    if (!file_exists($zip_path)) {
+        throw new Exception('Downloaded file does not exist: ' . $zip_path);
     }
+    
+    $file_size = filesize($zip_path);
+    if ($file_size < 1000) {
+        // Read first few bytes to check if it's an error page
+        $handle = fopen($zip_path, 'r');
+        $first_bytes = fread($handle, 500);
+        fclose($handle);
+        
+        if (strpos($first_bytes, '<html') !== false || strpos($first_bytes, '<!DOCTYPE') !== false) {
+            throw new Exception('Downloaded file appears to be an HTML error page, not a ZIP file. Please check the URL.');
+        }
+        
+        throw new Exception('Downloaded file is too small (' . $file_size . ' bytes). Expected ZIP file.');
+    }
+    
+    // Verify it's actually a ZIP file
+    $zip_test = new ZipArchive();
+    $zip_test_result = $zip_test->open($zip_path, ZipArchive::CHECKCONS);
+    if ($zip_test_result !== TRUE) {
+        $zip_test->close();
+        throw new Exception('Downloaded file is not a valid ZIP file. Error code: ' . $zip_test_result);
+    }
+    $zip_test->close();
+    
+    logMessage("ZIP file validated successfully. Size: " . number_format($file_size) . " bytes");
     
     logMessage("Update downloaded: $zip_path");
     
@@ -269,31 +363,122 @@ function installFiles($extract_path, $root_path) {
     // Find the actual update files (may be in a subdirectory)
     $update_files = findUpdateFiles($extract_path);
     
+    if (empty($update_files)) {
+        throw new Exception('No files found in update package');
+    }
+    
     $copied = 0;
     $errors = [];
     
-    foreach ($update_files as $file) {
-        $relative_path = substr($file, strlen($extract_path));
-        $target_path = $root_path . '/' . $relative_path;
+    // Get base path from first file (all files should have the same base)
+    $base_path = $update_files[0]['base_path'];
+    $base_path = rtrim(realpath($base_path) ?: $base_path, '/\\') . DIRECTORY_SEPARATOR;
+    $root_path = rtrim(realpath($root_path) ?: $root_path, '/\\') . DIRECTORY_SEPARATOR;
+    
+    logMessage("Installing files from base: $base_path to root: $root_path");
+    logMessage("First file example: " . $update_files[0]['full_path']);
+    
+    // Exclude certain files/directories from installation
+    $exclude_patterns = [
+        '/\.git/',
+        '/\.gitignore/',
+        '/README\.md$/',
+        '/LICENSE$/',
+        '/\.github/',
+        '/node_modules/',
+        '/vendor/',
+        '/composer\.lock$/',
+        '/package\.json$/',
+        '/package-lock\.json$/',
+        '/\.gitattributes$/',
+        '/\.gitmodules$/'
+    ];
+    
+    foreach ($update_files as $file_data) {
+        $file = $file_data['full_path'];
+        $file_base = $file_data['base_path'];
+        
+        // Normalize paths for comparison (handle Windows/Unix differences)
+        // Convert both to forward slashes for consistent comparison
+        $file_normalized = str_replace('\\', '/', $file);
+        $base_normalized = str_replace('\\', '/', $file_base);
+        
+        // Ensure base path ends with /
+        if (substr($base_normalized, -1) !== '/') {
+            $base_normalized .= '/';
+        }
+        
+        // Calculate relative path from base
+        if (strpos($file_normalized, $base_normalized) === 0) {
+            $relative_path = substr($file_normalized, strlen($base_normalized));
+        } else {
+            // Fallback: try direct replacement
+            $relative_path = str_replace($base_normalized, '', $file_normalized);
+        }
+        
+        // Clean up relative path
+        $relative_path = ltrim($relative_path, '/\\');
+        
+        // Skip if relative path is empty
+        if (empty($relative_path)) {
+            logMessage("Skipping file with empty relative path. File: $file, Base: $file_base");
+            continue;
+        }
+        
+        // Validate relative path doesn't contain dangerous patterns
+        if (strpos($relative_path, '..') !== false) {
+            logMessage("Skipping file with dangerous path: $relative_path");
+            continue;
+        }
+        
+        logMessage("Installing: $relative_path");
+        
+        // Skip excluded files
+        $skip = false;
+        foreach ($exclude_patterns as $pattern) {
+            if (preg_match($pattern, $relative_path)) {
+                $skip = true;
+                logMessage("Skipping excluded file: $relative_path");
+                break;
+            }
+        }
+        if ($skip) {
+            continue;
+        }
+        
+        // Use forward slashes for target path (works on both Windows and Unix)
+        $target_path = $root_path . str_replace('\\', '/', $relative_path);
         $target_dir = dirname($target_path);
+        
+        // Normalize target directory path
+        $target_dir = str_replace('\\', '/', $target_dir);
         
         // Create directory if needed
         if (!is_dir($target_dir)) {
-            mkdir($target_dir, 0755, true);
+            if (!mkdir($target_dir, 0755, true)) {
+                $errors[] = "Failed to create directory: $target_dir";
+                continue;
+            }
         }
         
         // Copy file
         if (!copy($file, $target_path)) {
-            $errors[] = "Failed to copy: $relative_path";
+            $error_msg = "Failed to copy: $relative_path";
+            $errors[] = $error_msg;
+            logMessage("ERROR: $error_msg");
         } else {
             $copied++;
+            if ($copied % 10 === 0) {
+                logMessage("Copied $copied files...");
+            }
         }
     }
     
     logMessage("Files installed: $copied copied, " . count($errors) . " errors");
     
     if (!empty($errors)) {
-        throw new Exception('Some files failed to install: ' . implode(', ', array_slice($errors, 0, 5)));
+        $error_list = array_slice($errors, 0, 10);
+        throw new Exception('Some files failed to install: ' . implode(', ', $error_list) . (count($errors) > 10 ? ' ... and ' . (count($errors) - 10) . ' more' : ''));
     }
     
     return [
@@ -304,15 +489,57 @@ function installFiles($extract_path, $root_path) {
 
 function findUpdateFiles($extract_path) {
     $files = [];
+    
+    // Normalize path
+    $extract_path = rtrim(realpath($extract_path) ?: $extract_path, '/\\') . DIRECTORY_SEPARATOR;
+    
+    logMessage("Searching for files in: $extract_path");
+    
+    // Check if extracted path contains a single subdirectory (common with GitHub ZIP downloads)
+    $dirs = [];
+    if (is_dir($extract_path)) {
+        $items = scandir($extract_path);
+        foreach ($items as $item) {
+            if ($item !== '.' && $item !== '..' && is_dir($extract_path . $item)) {
+                $dirs[] = $extract_path . $item;
+            }
+        }
+    }
+    
+    // If there's exactly one subdirectory, use that as the base (GitHub repository ZIP structure)
+    $base_path = $extract_path;
+    if (count($dirs) === 1) {
+        $base_path = rtrim(realpath($dirs[0]) ?: $dirs[0], '/\\') . DIRECTORY_SEPARATOR;
+        logMessage("Detected GitHub repository structure, using subdirectory: " . basename($base_path));
+    } else {
+        logMessage("No single subdirectory found, using extract path directly. Found " . count($dirs) . " directories.");
+    }
+    
+    if (!is_dir($base_path)) {
+        throw new Exception("Base path does not exist: $base_path");
+    }
+    
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($extract_path),
+        new RecursiveDirectoryIterator($base_path, RecursiveDirectoryIterator::SKIP_DOTS),
         RecursiveIteratorIterator::SELF_FIRST
     );
     
     foreach ($iterator as $file) {
         if ($file->isFile()) {
-            $files[] = $file->getRealPath();
+            $real_path = $file->getRealPath();
+            if ($real_path) {
+                $files[] = [
+                    'full_path' => $real_path,
+                    'base_path' => $base_path
+                ];
+            }
         }
+    }
+    
+    logMessage("Found " . count($files) . " files to install from base: $base_path");
+    
+    if (count($files) === 0) {
+        logMessage("WARNING: No files found! Extract path contents: " . implode(', ', array_slice(scandir($extract_path) ?: [], 0, 10)));
     }
     
     return $files;

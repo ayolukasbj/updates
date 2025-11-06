@@ -1,15 +1,41 @@
 <?php
+// Start output buffering to prevent WSOD
 ob_start();
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
+// Initialize variables
+$page_title = 'News Management';
+$success = '';
+$error = '';
+$db = null;
+$conn = null;
+$news_items = [];
+$categories = [];
+$total_news = 0;
+$total_pages = 0;
+$has_submitted_by = false;
+$page = 1;
+$per_page = 20;
+$offset = 0;
+$search = '';
+$category_filter = '';
+$status_filter = '';
+
 try {
+    // Require files
+    if (!file_exists('auth-check.php')) {
+        throw new Exception('auth-check.php not found');
+    }
     require_once 'auth-check.php';
+    
+    if (!file_exists('../config/database.php')) {
+        throw new Exception('database.php not found');
+    }
     require_once '../config/database.php';
 
-    $page_title = 'News Management';
-
+    // Initialize database
     $db = new Database();
     $conn = $db->getConnection();
 
@@ -18,68 +44,67 @@ try {
     }
 } catch (Exception $e) {
     ob_clean();
-    die('Error: ' . htmlspecialchars($e->getMessage()));
+    die('Error initializing: ' . htmlspecialchars($e->getMessage()));
 }
 
 // Handle actions
-$success = '';
-$error = '';
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
-    $news_id = $_POST['news_id'] ?? 0;
-    
     try {
-        if ($action === 'delete') {
+        $action = $_POST['action'] ?? '';
+        $news_id = (int)($_POST['news_id'] ?? 0);
+        
+        if ($action === 'delete' && $news_id > 0) {
             $stmt = $conn->prepare("DELETE FROM news WHERE id = ?");
             if ($stmt->execute([$news_id])) {
                 $success = 'News article deleted successfully';
                 if (function_exists('logAdminActivity')) {
-                    logAdminActivity($_SESSION['user_id'], 'delete_news', 'news', $news_id, "Deleted news ID: $news_id");
+                    logAdminActivity($_SESSION['user_id'] ?? 0, 'delete_news', 'news', $news_id, "Deleted news ID: $news_id");
                 }
             }
-        } elseif ($action === 'toggle_featured') {
+        } elseif ($action === 'toggle_featured' && $news_id > 0) {
             $stmt = $conn->prepare("UPDATE news SET featured = NOT featured WHERE id = ?");
             if ($stmt->execute([$news_id])) {
                 $success = 'News featured status updated';
                 if (function_exists('logAdminActivity')) {
-                    logAdminActivity($_SESSION['user_id'], 'toggle_news_featured', 'news', $news_id, "Toggled featured status");
+                    logAdminActivity($_SESSION['user_id'] ?? 0, 'toggle_news_featured', 'news', $news_id, "Toggled featured status");
                 }
             }
-        } elseif ($action === 'toggle_published') {
+        } elseif ($action === 'toggle_published' && $news_id > 0) {
             $checkStmt = $conn->prepare("SELECT is_published FROM news WHERE id = ?");
             $checkStmt->execute([$news_id]);
             $current_news = $checkStmt->fetch(PDO::FETCH_ASSOC);
             
-            if ($current_news && $current_news['is_published'] == 0) {
-                $stmt = $conn->prepare("UPDATE news SET is_published = 1, author_id = ? WHERE id = ?");
-                $stmt->execute([$_SESSION['user_id'], $news_id]);
-            } else {
-                $stmt = $conn->prepare("UPDATE news SET is_published = 0 WHERE id = ?");
-                $stmt->execute([$news_id]);
-            }
-            
-            if ($stmt->rowCount() > 0) {
-                $success = 'News publish status updated';
-                if (function_exists('logAdminActivity')) {
-                    logAdminActivity($_SESSION['user_id'], 'toggle_news_published', 'news', $news_id, "Toggled published status");
+            if ($current_news) {
+                if (($current_news['is_published'] ?? 0) == 0) {
+                    $stmt = $conn->prepare("UPDATE news SET is_published = 1, author_id = ? WHERE id = ?");
+                    $stmt->execute([$_SESSION['user_id'] ?? 0, $news_id]);
+                } else {
+                    $stmt = $conn->prepare("UPDATE news SET is_published = 0 WHERE id = ?");
+                    $stmt->execute([$news_id]);
+                }
+                
+                if ($stmt->rowCount() > 0) {
+                    $success = 'News publish status updated';
+                    if (function_exists('logAdminActivity')) {
+                        logAdminActivity($_SESSION['user_id'] ?? 0, 'toggle_news_published', 'news', $news_id, "Toggled published status");
+                    }
                 }
             }
-        } elseif ($action === 'approve') {
+        } elseif ($action === 'approve' && $news_id > 0) {
             $stmt = $conn->prepare("UPDATE news SET is_published = 1, author_id = ? WHERE id = ?");
-            if ($stmt->execute([$_SESSION['user_id'], $news_id])) {
+            if ($stmt->execute([$_SESSION['user_id'] ?? 0, $news_id])) {
                 $success = 'News article approved and published';
                 if (function_exists('logAdminActivity')) {
-                    logAdminActivity($_SESSION['user_id'], 'approve_news', 'news', $news_id, "Approved news ID: $news_id");
+                    logAdminActivity($_SESSION['user_id'] ?? 0, 'approve_news', 'news', $news_id, "Approved news ID: $news_id");
                 }
             }
-        } elseif ($action === 'reject') {
+        } elseif ($action === 'reject' && $news_id > 0) {
             $rejection_reason = $_POST['rejection_reason'] ?? 'No reason provided';
             $stmt = $conn->prepare("UPDATE news SET is_published = 0, rejection_reason = ? WHERE id = ?");
             if ($stmt->execute([$rejection_reason, $news_id])) {
                 $success = 'News article rejected';
                 if (function_exists('logAdminActivity')) {
-                    logAdminActivity($_SESSION['user_id'], 'reject_news', 'news', $news_id, "Rejected news ID: $news_id");
+                    logAdminActivity($_SESSION['user_id'] ?? 0, 'reject_news', 'news', $news_id, "Rejected news ID: $news_id");
                 }
             }
         }
@@ -90,23 +115,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // Pagination and filters
-$page = $_GET['page'] ?? 1;
-$per_page = 20;
-$offset = ($page - 1) * $per_page;
-$search = $_GET['search'] ?? '';
-$category_filter = $_GET['category'] ?? '';
-$status_filter = $_GET['status'] ?? '';
-
-// Initialize variables
-$news_items = [];
-$categories = [];
-$total_news = 0;
-$total_pages = 0;
-$has_submitted_by = false;
+try {
+    $page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+    $per_page = 20;
+    $offset = ($page - 1) * $per_page;
+    $search = trim($_GET['search'] ?? '');
+    $category_filter = trim($_GET['category'] ?? '');
+    $status_filter = trim($_GET['status'] ?? '');
+} catch (Exception $e) {
+    error_log("Filter error: " . $e->getMessage());
+}
 
 // Get news from Database
 try {
-        // Check if submitted_by column exists
+    // Check if submitted_by column exists
+    try {
         $columns_check = $conn->query("SHOW COLUMNS FROM news LIKE 'submitted_by'");
         $has_submitted_by = $columns_check->rowCount() > 0;
     } catch (Exception $e) {
@@ -117,13 +140,13 @@ try {
     $where_clauses = [];
     $params = [];
     
-    if ($search) {
+    if (!empty($search)) {
         $where_clauses[] = "(title LIKE ? OR content LIKE ?)";
         $params[] = "%$search%";
         $params[] = "%$search%";
     }
     
-    if ($category_filter) {
+    if (!empty($category_filter)) {
         $where_clauses[] = "category = ?";
         $params[] = $category_filter;
     }
@@ -138,42 +161,35 @@ try {
     
     $where_sql = !empty($where_clauses) ? 'WHERE ' . implode(' AND ', $where_clauses) : '';
     
-    try {
-        $count_sql = "SELECT COUNT(*) as count FROM news $where_sql";
-        $stmt = $conn->prepare($count_sql);
-        $stmt->execute($params);
-        $total_news = $stmt->fetch(PDO::FETCH_ASSOC)['count'];
-        $total_pages = ceil($total_news / $per_page);
-        
-        // Get news
-        if ($has_submitted_by) {
-            $sql = "SELECT n.*, u.username as submitted_by_username 
-                    FROM news n 
-                    LEFT JOIN users u ON n.submitted_by = u.id 
-                    $where_sql 
-                    ORDER BY n.created_at DESC 
-                    LIMIT $per_page OFFSET $offset";
-        } else {
-            $sql = "SELECT n.*, NULL as submitted_by_username 
-                    FROM news n 
-                    $where_sql 
-                    ORDER BY n.created_at DESC 
-                    LIMIT $per_page OFFSET $offset";
-        }
-        $stmt = $conn->prepare($sql);
-        $stmt->execute($params);
-        $news_items = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Get categories
-        $stmt = $conn->query("SELECT DISTINCT category FROM news WHERE category IS NOT NULL ORDER BY category");
-        $categories = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    } catch (Exception $e) {
-        error_log("News query error: " . $e->getMessage());
-        $news_items = [];
-        $categories = [];
-        $total_news = 0;
-        $total_pages = 0;
+    // Get count
+    $count_sql = "SELECT COUNT(*) as count FROM news $where_sql";
+    $stmt = $conn->prepare($count_sql);
+    $stmt->execute($params);
+    $total_news = (int)($stmt->fetch(PDO::FETCH_ASSOC)['count'] ?? 0);
+    $total_pages = $total_news > 0 ? ceil($total_news / $per_page) : 0;
+    
+    // Get news
+    if ($has_submitted_by) {
+        $sql = "SELECT n.*, u.username as submitted_by_username 
+                FROM news n 
+                LEFT JOIN users u ON n.submitted_by = u.id 
+                $where_sql 
+                ORDER BY n.created_at DESC 
+                LIMIT $per_page OFFSET $offset";
+    } else {
+        $sql = "SELECT n.*, NULL as submitted_by_username 
+                FROM news n 
+                $where_sql 
+                ORDER BY n.created_at DESC 
+                LIMIT $per_page OFFSET $offset";
     }
+    $stmt = $conn->prepare($sql);
+    $stmt->execute($params);
+    $news_items = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Get categories
+    $stmt = $conn->query("SELECT DISTINCT category FROM news WHERE category IS NOT NULL ORDER BY category");
+    $categories = $stmt->fetchAll(PDO::FETCH_COLUMN);
 } catch (Exception $e) {
     error_log("News query error: " . $e->getMessage());
     $news_items = [];
@@ -183,8 +199,13 @@ try {
     $has_submitted_by = false;
 }
 
+// Include header
 try {
-    include 'includes/header.php';
+    if (file_exists('includes/header.php')) {
+        include 'includes/header.php';
+    } else {
+        throw new Exception('Header file not found');
+    }
 } catch (Exception $e) {
     ob_clean();
     die('Error loading header: ' . htmlspecialchars($e->getMessage()));
@@ -286,7 +307,7 @@ try {
                     <?php else: ?>
                     <?php foreach ($news_items as $news): ?>
                     <tr>
-                        <td><?php echo $news['id'] ?? 'N/A'; ?></td>
+                        <td><?php echo htmlspecialchars($news['id'] ?? 'N/A'); ?></td>
                         <td>
                             <strong><?php echo htmlspecialchars($news['title'] ?? 'Untitled'); ?></strong>
                             <?php if ($has_submitted_by && !empty($news['submitted_by_username'])): ?>
@@ -325,7 +346,6 @@ try {
                             <?php endif; ?>
                         </td>
                         <td>
-                            <?php if (true): ?>
                             <form method="POST" style="display: inline;">
                                 <input type="hidden" name="action" value="toggle_featured">
                                 <input type="hidden" name="news_id" value="<?php echo $news['id']; ?>">
@@ -334,18 +354,12 @@ try {
                                     <?php echo (!empty($news['featured'])) ? 'Featured' : 'Not Featured'; ?>
                                 </button>
                             </form>
-                            <?php else: ?>
-                            <span class="badge <?php echo (!empty($news['featured'])) ? 'badge-warning' : 'badge-secondary'; ?>">
-                                <?php echo (!empty($news['featured'])) ? 'Featured' : 'Not Featured'; ?>
-                            </span>
-                            <?php endif; ?>
                         </td>
                         <td><?php echo date('M d, Y', strtotime($news['created_at'] ?? $news['published_at'] ?? 'now')); ?></td>
                         <td>
                             <a href="news-edit.php?id=<?php echo $news['id']; ?>" class="btn btn-sm btn-primary" title="Edit">
                                 <i class="fas fa-edit"></i>
                             </a>
-                            <?php if (true): ?>
                             <form method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this news article?');">
                                 <input type="hidden" name="action" value="delete">
                                 <input type="hidden" name="news_id" value="<?php echo $news['id']; ?>">
@@ -353,7 +367,6 @@ try {
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </form>
-                            <?php endif; ?>
                         </td>
                     </tr>
                     <?php endforeach; ?>
@@ -422,5 +435,14 @@ document.getElementById('rejectModal').addEventListener('click', function(e) {
 });
 </script>
 
-<?php include 'includes/footer.php'; ?>
+<?php 
+try {
+    if (file_exists('includes/footer.php')) {
+        include 'includes/footer.php';
+    }
+} catch (Exception $e) {
+    error_log("Footer include error: " . $e->getMessage());
+}
+ob_end_flush();
+?>
 

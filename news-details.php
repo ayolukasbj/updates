@@ -559,11 +559,11 @@ try {
                             }
                         } catch (Exception $e) {}
                         ?>
-                        <a href="<?php echo $prev ? (!empty($prev['slug']) ? '/music/news/' . rawurlencode($prev['slug']) : '/music/news/' . $prev['id']) : '#'; ?>">
+                        <a href="<?php echo $prev ? (!empty($prev['slug']) ? base_url('news/' . rawurlencode($prev['slug'])) : base_url('news/' . $prev['id'])) : '#'; ?>">
                             <small>Previous Post</small>
                             <div><?php echo $prev ? htmlspecialchars($prev['title']) : '—'; ?></div>
                         </a>
-                        <a style="text-align:right;" href="<?php echo $next ? (!empty($next['slug']) ? '/music/news/' . rawurlencode($next['slug']) : '/music/news/' . $next['id']) : '#'; ?>">
+                        <a style="text-align:right;" href="<?php echo $next ? (!empty($next['slug']) ? base_url('news/' . rawurlencode($next['slug'])) : base_url('news/' . $next['id'])) : '#'; ?>">
                             <small>Next Post</small>
                             <div><?php echo $next ? htmlspecialchars($next['title']) : '—'; ?></div>
                         </a>
@@ -684,7 +684,7 @@ try {
                 <div class="widget">
                     <div class="widget-title">Recent News</div>
                     <div class="widget-body widget-list">
-                        <?php foreach ($recent_news as $rn): $lnk = !empty($rn['slug']) ? '/music/news/' . rawurlencode($rn['slug']) : '/music/news/' . $rn['id']; ?>
+                        <?php foreach ($recent_news as $rn): $lnk = !empty($rn['slug']) ? base_url('news/' . rawurlencode($rn['slug'])) : base_url('news/' . $rn['id']); ?>
                         <div class="item">
                             <img class="thumb" src="<?php echo htmlspecialchars($rn['image'] ?: ''); ?>" alt="" onerror="this.style.background='#e9eef3';this.src='';">
                             <div>
@@ -808,7 +808,7 @@ try {
             <div class="widget">
                 <div class="widget-title">Related Posts</div>
                 <div class="widget-body widget-list">
-                    <?php foreach ($related_news as $related): $rl = !empty($related['slug']) ? '/music/news/' . rawurlencode($related['slug']) : '/music/news/' . $related['id']; ?>
+                    <?php foreach ($related_news as $related): $rl = !empty($related['slug']) ? base_url('news/' . rawurlencode($related['slug'])) : base_url('news/' . $related['id']); ?>
                     <div class="item">
                         <img class="thumb" src="<?php echo htmlspecialchars($related['image'] ?? ''); ?>" alt="" onerror="this.style.background='#e9eef3';this.src='';">
                         <div>

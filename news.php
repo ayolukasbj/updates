@@ -181,7 +181,7 @@ try {
             <?php 
             $news_slug = $news['slug'] ?? '';
             $news_id = $news['id'] ?? '';
-            $news_link = !empty($news_slug) ? '/music/news/' . rawurlencode($news_slug) : '/music/news/' . $news_id;
+            $news_link = !empty($news_slug) ? base_url('news/' . rawurlencode($news_slug)) : base_url('news/' . $news_id);
             ?>
             <div class="news-card" onclick="window.location.href='<?php echo $news_link; ?>'">
                 <div class="news-image">

@@ -390,7 +390,7 @@ function verifyPlatformLicense() {
                     <h1>License Verification Failed</h1>
                     <p>' . htmlspecialchars($license_check['message']) . '</p>
                     <p>Please contact support or activate your license.</p>
-                    <a href="/music/admin/license-management.php" class="btn">Activate License</a>
+                    <a href="' . (defined('BASE_PATH') ? BASE_PATH : '/') . 'admin/license-management.php" class="btn">Activate License</a>
                 </div>
             </body>
             </html>

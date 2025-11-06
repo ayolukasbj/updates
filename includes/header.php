@@ -963,7 +963,8 @@ function displaySearchResults(data) {
     if (data.news && data.news.length > 0) {
         data.news.forEach(news => {
             const newsImage = news.image || 'assets/images/default-cover.png';
-            const newsUrl = `/music/news/${encodeURIComponent(news.slug || '')}`;
+            const basePath = '<?php echo defined("BASE_PATH") ? BASE_PATH : "/"; ?>';
+            const newsUrl = basePath + `news/${encodeURIComponent(news.slug || '')}`;
             const newsDate = news.created_at ? new Date(news.created_at).toLocaleDateString() : '';
             html += `
                 <a href="${newsUrl}" class="search-result-item">

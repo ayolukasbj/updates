@@ -2,6 +2,18 @@
         </div>
     </div>
 
+    <!-- Admin Footer with Appreciation -->
+    <footer style="background: #f8f9fa; border-top: 1px solid #dee2e6; padding: 20px; margin-top: 40px; text-align: center; color: #6c757d; font-size: 14px;">
+        <div style="max-width: 1200px; margin: 0 auto;">
+            <p style="margin: 0 0 10px 0;">
+                Powered by <a href="https://hylinktech.com" target="_blank" rel="noopener noreferrer" style="color: #3b82f6; text-decoration: none; font-weight: 600;">HyLink Technologies (U) SMC</a>
+            </p>
+            <p style="margin: 0; font-size: 12px; color: #999;">
+                We appreciate the support and development by HyLink Technologies (U) SMC
+            </p>
+        </div>
+    </footer>
+
     <script>
         // Mobile menu toggle
         const menuToggle = document.getElementById('menuToggle');

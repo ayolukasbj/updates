@@ -1,16 +1,38 @@
 <?php
+// Start output buffering to prevent WSOD
 ob_start();
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
+// Initialize variables
+$page_title = 'License Management';
+$success = '';
+$error = '';
+$db = null;
+$conn = null;
+$current_license_key = '';
+$license_status = ['valid' => false, 'message' => 'License not found'];
+$licenses = [];
+
 try {
+    // Require files
+    if (!file_exists('auth-check.php')) {
+        throw new Exception('auth-check.php not found');
+    }
     require_once 'auth-check.php';
+    
+    if (!file_exists('../config/database.php')) {
+        throw new Exception('database.php not found');
+    }
     require_once '../config/database.php';
+    
+    if (!file_exists('../config/license.php')) {
+        throw new Exception('license.php not found');
+    }
     require_once '../config/license.php';
 
-    $page_title = 'License Management';
-
+    // Initialize database
     $db = new Database();
     $conn = $db->getConnection();
     
@@ -19,11 +41,8 @@ try {
     }
 } catch (Exception $e) {
     ob_clean();
-    die('Error: ' . htmlspecialchars($e->getMessage()));
+    die('Error initializing: ' . htmlspecialchars($e->getMessage()));
 }
-
-$success = '';
-$error = '';
 
 // Create licenses table if it doesn't exist
 try {
@@ -60,17 +79,18 @@ try {
     ");
 } catch (Exception $e) {
     $error = 'Database error: ' . $e->getMessage();
+    error_log("License table creation error: " . $e->getMessage());
 }
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // CSRF Protection
-    if (!isset($_POST['csrf_token']) || !isset($_SESSION['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        $error = 'Invalid security token. Please refresh the page and try again.';
-    } else {
-        $action = $_POST['action'] ?? '';
-        
-        try {
+    try {
+        // CSRF Protection
+        if (!isset($_POST['csrf_token']) || !isset($_SESSION['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+            $error = 'Invalid security token. Please refresh the page and try again.';
+        } else {
+            $action = $_POST['action'] ?? '';
+            
             switch ($action) {
                 case 'activate_license':
                     $license_key = trim($_POST['license_key'] ?? '');
@@ -91,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $domain = preg_replace('/:\d+$/', '', $domain);
                     $ip = $_SERVER['SERVER_ADDR'] ?? $_SERVER['LOCAL_ADDR'] ?? '';
                     
-                    // Auto-detect license server URL (local vs production)
+                    // Auto-detect license server URL
                     $is_local = (
                         $domain === 'localhost' || 
                         strpos($domain, '127.0.0.1') !== false ||
@@ -168,45 +188,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         ");
                         $saveStmt->execute([$domain, $domain]);
                         
-                        // Update LICENSE_KEY constant in config file
-                        $config_file = '../config/config.php';
-                        if (file_exists($config_file) && is_writable($config_file)) {
-                            $config_content = file_get_contents($config_file);
-                            
-                            // Update LICENSE_KEY constant
-                            if (preg_match("/define\s*\(\s*['\"]LICENSE_KEY['\"]\s*,\s*['\"][^'\"]*['\"]\s*\)/", $config_content)) {
-                                $config_content = preg_replace(
-                                    "/define\s*\(\s*['\"]LICENSE_KEY['\"]\s*,\s*['\"][^'\"]*['\"]\s*\)/",
-                                    "define('LICENSE_KEY', " . var_export($license_key, true) . ")",
-                                    $config_content
-                                );
-                            } else {
-                                // Add if doesn't exist
-                                $config_content = str_replace(
-                                    "// License Configuration",
-                                    "// License Configuration\ndefine('LICENSE_KEY', " . var_export($license_key, true) . ");",
-                                    $config_content
-                                );
-                            }
-                            
-                            // Update LICENSE_SERVER_URL if needed
-                            if (!empty($license_server_url)) {
-                                if (preg_match("/define\s*\(\s*['\"]LICENSE_SERVER_URL['\"]\s*,\s*['\"][^'\"]*['\"]\s*\)/", $config_content)) {
-                                    $config_content = preg_replace(
-                                        "/define\s*\(\s*['\"]LICENSE_SERVER_URL['\"]\s*,\s*['\"][^'\"]*['\"]\s*\)/",
-                                        "define('LICENSE_SERVER_URL', " . var_export($license_server_url, true) . ")",
-                                        $config_content
-                                    );
-                                }
-                            }
-                            
-                            file_put_contents($config_file, $config_content);
-                        }
-                        
                         $success = 'License activated successfully! Your license is now active and verified.';
                         
                         if (function_exists('logAdminActivity')) {
-                            logAdminActivity($_SESSION['user_id'], 'activate_license', 'license', 0, "Activated license: " . substr($license_key, 0, 10) . "...");
+                            logAdminActivity($_SESSION['user_id'] ?? 0, 'activate_license', 'license', 0, "Activated license: " . substr($license_key, 0, 10) . "...");
                         }
                     } catch (Exception $e) {
                         $error = 'License verified but failed to save: ' . $e->getMessage();
@@ -214,91 +199,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     }
                     break;
                 
-            case 'create_license':
-                $customer_name = trim($_POST['customer_name'] ?? '');
-                $customer_email = trim($_POST['customer_email'] ?? '');
-                $domain = trim($_POST['domain'] ?? '');
-                $license_type = trim($_POST['license_type'] ?? 'standard');
-                $expires_at = !empty($_POST['expires_at']) ? $_POST['expires_at'] : null;
-                $notes = trim($_POST['notes'] ?? '');
-                
-                if (empty($customer_email) || !filter_var($customer_email, FILTER_VALIDATE_EMAIL)) {
-                    $error = 'Valid customer email is required!';
+                case 'deactivate_license':
+                    // Remove license key from settings
+                    try {
+                        $removeStmt = $conn->prepare("DELETE FROM settings WHERE setting_key = 'license_key'");
+                        $removeStmt->execute();
+                        
+                        $success = 'License deactivated successfully. Please activate a new license to continue.';
+                        if (function_exists('logAdminActivity')) {
+                            logAdminActivity($_SESSION['user_id'] ?? 0, 'deactivate_license', 'license', 0, "Deactivated license");
+                        }
+                    } catch (Exception $e) {
+                        $error = 'Error deactivating license: ' . $e->getMessage();
+                    }
                     break;
-                }
-                
-                // Generate license key
-                $license_key = LicenseManager::generateLicenseKey();
-                
-                // Ensure uniqueness
-                $checkStmt = $conn->prepare("SELECT id FROM licenses WHERE license_key = ?");
-                $checkStmt->execute([$license_key]);
-                while ($checkStmt->fetch()) {
-                    $license_key = LicenseManager::generateLicenseKey();
-                    $checkStmt->execute([$license_key]);
-                }
-                
-                $stmt = $conn->prepare("
-                    INSERT INTO licenses (license_key, customer_name, customer_email, domain, bound_domain, license_type, expires_at, notes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ");
-                $stmt->execute([$license_key, $customer_name, $customer_email, $domain, $domain, $license_type, $expires_at, $notes]);
-                
-                $success = 'License created successfully! Key: ' . htmlspecialchars($license_key);
-                logAdminActivity($_SESSION['user_id'], 'create_license', 'license', $conn->lastInsertId(), "Created license for: $customer_email");
-                break;
-                
-            case 'update_license':
-                $license_id = (int)($_POST['license_id'] ?? 0);
-                $status = trim($_POST['status'] ?? 'active');
-                $expires_at = !empty($_POST['expires_at']) ? $_POST['expires_at'] : null;
-                $notes = trim($_POST['notes'] ?? '');
-                
-                $stmt = $conn->prepare("UPDATE licenses SET status = ?, expires_at = ?, notes = ? WHERE id = ?");
-                $stmt->execute([$status, $expires_at, $notes, $license_id]);
-                
-                $success = 'License updated successfully!';
-                if (function_exists('logAdminActivity')) {
-                    logAdminActivity($_SESSION['user_id'], 'update_license', 'license', $license_id, "Updated license ID: $license_id");
-                }
-                break;
-                
-            case 'deactivate_license':
-                // Remove license key from settings and config
-                try {
-                    $removeStmt = $conn->prepare("DELETE FROM settings WHERE setting_key = 'license_key'");
-                    $removeStmt->execute();
-                    
-                    // Remove from config file
-                    $config_file = '../config/config.php';
-                    if (file_exists($config_file) && is_writable($config_file)) {
-                        $config_content = file_get_contents($config_file);
-                        $config_content = preg_replace(
-                            "/define\s*\(\s*['\"]LICENSE_KEY['\"]\s*,\s*['\"][^'\"]*['\"]\s*\);/",
-                            "define('LICENSE_KEY', '');",
-                            $config_content
-                        );
-                        file_put_contents($config_file, $config_content);
-                    }
-                    
-                    $success = 'License deactivated successfully. Please activate a new license to continue.';
-                    if (function_exists('logAdminActivity')) {
-                        logAdminActivity($_SESSION['user_id'], 'deactivate_license', 'license', 0, "Deactivated license");
-                    }
-                } catch (Exception $e) {
-                    $error = 'Error deactivating license: ' . $e->getMessage();
-                }
-                break;
+            }
         }
     } catch (Exception $e) {
         $error = 'Error: ' . $e->getMessage();
+        error_log("License action error: " . $e->getMessage());
     }
 }
 
-// Get current license (check both database and config)
-$current_license_key = '';
+// Get current license (check database)
 try {
-    $stmt = $conn->query("SELECT setting_value FROM settings WHERE setting_key = 'license_key' LIMIT 1");
+    $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'license_key' LIMIT 1");
+    $stmt->execute();
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($result && !empty($result['setting_value'])) {
         $current_license_key = $result['setting_value'];
@@ -318,20 +244,30 @@ if (!isset($_SESSION['csrf_token'])) {
 }
 
 // Verify current license
-$license_manager = new LicenseManager();
-$license_status = $license_manager->verifyLicense();
+try {
+    $license_manager = new LicenseManager();
+    $license_status = $license_manager->verifyLicense();
+} catch (Exception $e) {
+    error_log("License verification error: " . $e->getMessage());
+    $license_status = ['valid' => false, 'message' => 'License verification error'];
+}
 
 // Get all licenses
-$licenses = [];
 try {
     $stmt = $conn->query("SELECT * FROM licenses ORDER BY created_at DESC");
     $licenses = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     $licenses = [];
+    error_log("License fetch error: " . $e->getMessage());
 }
 
+// Include header
 try {
-    include 'includes/header.php';
+    if (file_exists('includes/header.php')) {
+        include 'includes/header.php';
+    } else {
+        throw new Exception('Header file not found');
+    }
 } catch (Exception $e) {
     ob_clean();
     die('Error loading header: ' . htmlspecialchars($e->getMessage()));
@@ -361,7 +297,7 @@ try {
         <h2>Current License Status</h2>
     </div>
     <div class="card-body">
-        <?php if ($license_status['valid']): ?>
+        <?php if ($license_status['valid'] ?? false): ?>
         <div style="padding: 20px; background: #d1e7dd; border-radius: 6px; margin-bottom: 15px;">
             <h3 style="color: #0f5132; margin: 0 0 10px 0;">
                 <i class="fas fa-check-circle"></i> License Active
@@ -369,11 +305,6 @@ try {
             <p style="color: #0f5132; margin: 0;">
                 <?php echo htmlspecialchars($license_status['message'] ?? 'License is valid and active'); ?>
             </p>
-            <?php if (isset($license_status['grace_period'])): ?>
-            <p style="color: #856404; margin-top: 10px;">
-                <strong>Warning:</strong> You are in grace period. Please activate a license key.
-            </p>
-            <?php endif; ?>
         </div>
         <?php else: ?>
         <div style="padding: 20px; background: #f8d7da; border-radius: 6px; margin-bottom: 15px;">
@@ -433,7 +364,6 @@ try {
                     alert('License key copied to clipboard!');
                 });
             } else {
-                // Fallback for older browsers
                 const textarea = document.createElement('textarea');
                 textarea.value = key;
                 document.body.appendChild(textarea);
@@ -494,9 +424,14 @@ try {
     </div>
 </div>
 
-<!-- Create License section removed -->
-<!-- All Licenses section removed -->
-
-<?php include 'includes/footer.php'; ?>
-
+<?php 
+try {
+    if (file_exists('includes/footer.php')) {
+        include 'includes/footer.php';
+    }
+} catch (Exception $e) {
+    error_log("Footer include error: " . $e->getMessage());
+}
+ob_end_flush();
+?>
 

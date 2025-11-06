@@ -1781,7 +1781,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                 $ticker_items = array_merge($ticker_news, $ticker_news);
                 foreach ($ticker_items as $ticker_item): 
                     $ticker_slug = $ticker_item['slug'] ?? '';
-                    $ticker_link = !empty($ticker_slug) ? '/music/news/' . rawurlencode($ticker_slug) : '/music/news/' . $ticker_item['id'];
+                    $ticker_link = !empty($ticker_slug) ? base_url('news/' . rawurlencode($ticker_slug)) : base_url('news/' . $ticker_item['id']);
                 ?>
                 <div class="ticker-item" onclick="window.location.href='<?php echo $ticker_link; ?>'">
                     <span class="ticker-item-text"><?php echo htmlspecialchars($ticker_item['title']); ?></span>
@@ -1824,7 +1824,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
             <div class="homepage-slider">
                 <?php foreach ($featured_carousel as $index => $carousel_news): ?>
                 <div class="homepage-slider-slide <?php echo $index === 0 ? 'active' : ''; ?>" data-slide="<?php echo $index; ?>">
-                    <a href="<?php echo !empty($carousel_news['slug']) ? '/music/news/' . rawurlencode($carousel_news['slug']) : '/music/news/' . $carousel_news['id']; ?>" style="position: relative; width: 100%; height: 100%; cursor: pointer; display: block; text-decoration: none;">
+                    <a href="<?php echo !empty($carousel_news['slug']) ? base_url('news/' . rawurlencode($carousel_news['slug'])) : base_url('news/' . $carousel_news['id']); ?>" style="position: relative; width: 100%; height: 100%; cursor: pointer; display: block; text-decoration: none;">
                         <?php if (!empty($carousel_news['image'])): ?>
                         <img src="<?php echo htmlspecialchars($carousel_news['image']); ?>" alt="<?php echo htmlspecialchars($carousel_news['title']); ?>">
                         <?php else: ?>
@@ -1887,7 +1887,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                         }
                         foreach ($trending_articles as $article): 
                         ?>
-                        <a href="<?php echo !empty($article['slug']) ? '/music/news/' . rawurlencode($article['slug']) : '/music/news/' . $article['id']; ?>" class="right-slider-item">
+                        <a href="<?php echo !empty($article['slug']) ? base_url('news/' . rawurlencode($article['slug'])) : base_url('news/' . $article['id']); ?>" class="right-slider-item">
                             <div class="right-slider-item-thumb">
                                 <?php if (!empty($article['image'])): ?>
                                 <img src="<?php echo htmlspecialchars($article['image']); ?>" alt="<?php echo htmlspecialchars($article['title']); ?>">
@@ -1999,7 +1999,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                                 }
                                 $item_icon = 'fa-music';
                             } else {
-                                $item_link = !empty($article['slug']) ? '/music/news/' . rawurlencode($article['slug']) : '/music/news/' . $article['id'];
+                                $item_link = !empty($article['slug']) ? base_url('news/' . rawurlencode($article['slug'])) : base_url('news/' . $article['id']);
                                 $item_icon = 'fa-newspaper';
                             }
                         ?>
@@ -2048,7 +2048,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                         }
                         foreach ($latest_articles as $article): 
                         ?>
-                        <a href="<?php echo !empty($article['slug']) ? '/music/news/' . rawurlencode($article['slug']) : '/music/news/' . $article['id']; ?>" class="right-slider-item">
+                        <a href="<?php echo !empty($article['slug']) ? base_url('news/' . rawurlencode($article['slug'])) : base_url('news/' . $article['id']); ?>" class="right-slider-item">
                             <div class="right-slider-item-thumb">
                                 <?php if (!empty($article['image'])): ?>
                                 <img src="<?php echo htmlspecialchars($article['image']); ?>" alt="<?php echo htmlspecialchars($article['title']); ?>">
@@ -2082,7 +2082,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                     <div style="background: white; padding: 20px; border-radius: 0 0 8px 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
                         <?php foreach ($recent_news_section as $index => $news): ?>
                         <div class="recent-news-item" style="margin-bottom: <?php echo $index < count($recent_news_section) - 1 ? '30px' : '0'; ?>; padding-bottom: <?php echo $index < count($recent_news_section) - 1 ? '30px' : '0'; ?>; border-bottom: <?php echo $index < count($recent_news_section) - 1 ? '1px solid #e0e0e0' : 'none'; ?>;">
-                            <a href="<?php echo !empty($news['slug']) ? '/music/news/' . rawurlencode($news['slug']) : '/music/news/' . $news['id']; ?>" style="text-decoration: none; color: inherit; display: block;">
+                            <a href="<?php echo !empty($news['slug']) ? base_url('news/' . rawurlencode($news['slug'])) : base_url('news/' . $news['id']); ?>" style="text-decoration: none; color: inherit; display: block;">
                                 <div style="display: grid; grid-template-columns: 200px 1fr; gap: 20px;">
                                     <div style="height: 150px; overflow: hidden; border-radius: 8px;">
                                         <?php if (!empty($news['image'])): ?>
@@ -2142,7 +2142,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                                 <?php if (!empty($popular_today)): ?>
                                     <?php foreach ($popular_today as $index => $pop): ?>
                                     <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: <?php echo $index < count($popular_today) - 1 ? '1px solid #e0e0e0' : 'none'; ?>;">
-                                        <a href="<?php echo !empty($pop['slug']) ? '/music/news/' . rawurlencode($pop['slug']) : '/music/news/' . $pop['id']; ?>" style="text-decoration: none; color: inherit; display: block;">
+                                        <a href="<?php echo !empty($pop['slug']) ? base_url('news/' . rawurlencode($pop['slug'])) : base_url('news/' . $pop['id']); ?>" style="text-decoration: none; color: inherit; display: block;">
                                             <div style="height: 120px; overflow: hidden; border-radius: 6px; margin-bottom: 10px;">
                                                 <?php if (!empty($pop['image'])): ?>
                                                 <img src="<?php echo htmlspecialchars($pop['image']); ?>" alt="<?php echo htmlspecialchars($pop['title']); ?>" style="width: 100%; height: 100%; object-fit: cover;">
@@ -2167,7 +2167,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                                 <?php if (!empty($popular_week)): ?>
                                     <?php foreach ($popular_week as $index => $pop): ?>
                                     <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: <?php echo $index < count($popular_week) - 1 ? '1px solid #e0e0e0' : 'none'; ?>;">
-                                        <a href="<?php echo !empty($pop['slug']) ? '/music/news/' . rawurlencode($pop['slug']) : '/music/news/' . $pop['id']; ?>" style="text-decoration: none; color: inherit; display: block;">
+                                        <a href="<?php echo !empty($pop['slug']) ? base_url('news/' . rawurlencode($pop['slug'])) : base_url('news/' . $pop['id']); ?>" style="text-decoration: none; color: inherit; display: block;">
                                             <div style="height: 120px; overflow: hidden; border-radius: 6px; margin-bottom: 10px;">
                                                 <?php if (!empty($pop['image'])): ?>
                                                 <img src="<?php echo htmlspecialchars($pop['image']); ?>" alt="<?php echo htmlspecialchars($pop['title']); ?>" style="width: 100%; height: 100%; object-fit: cover;">
@@ -2192,7 +2192,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                                 <?php if (!empty($popular_month)): ?>
                                     <?php foreach ($popular_month as $index => $pop): ?>
                                     <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: <?php echo $index < count($popular_month) - 1 ? '1px solid #e0e0e0' : 'none'; ?>;">
-                                        <a href="<?php echo !empty($pop['slug']) ? '/music/news/' . rawurlencode($pop['slug']) : '/music/news/' . $pop['id']; ?>" style="text-decoration: none; color: inherit; display: block;">
+                                        <a href="<?php echo !empty($pop['slug']) ? base_url('news/' . rawurlencode($pop['slug'])) : base_url('news/' . $pop['id']); ?>" style="text-decoration: none; color: inherit; display: block;">
                                             <div style="height: 120px; overflow: hidden; border-radius: 6px; margin-bottom: 10px;">
                                                 <?php if (!empty($pop['image'])): ?>
                                                 <img src="<?php echo htmlspecialchars($pop['image']); ?>" alt="<?php echo htmlspecialchars($pop['title']); ?>" style="width: 100%; height: 100%; object-fit: cover;">
@@ -2349,7 +2349,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
             <h2 style="font-size: 24px; font-weight: 700; color: #2c3e50; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 3px solid #2196F3;">Political News</h2>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
                 <?php foreach (array_slice($politics_news, 0, 6) as $news): ?>
-                <a href="<?php echo !empty($news['slug']) ? '/music/news/' . rawurlencode($news['slug']) : '/music/news/' . $news['id']; ?>" style="text-decoration: none; color: inherit; display: block;">
+                <a href="<?php echo !empty($news['slug']) ? base_url('news/' . rawurlencode($news['slug'])) : base_url('news/' . $news['id']); ?>" style="text-decoration: none; color: inherit; display: block;">
                 <div style="background: white; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.3s; box-shadow: 0 2px 8px rgba(0,0,0,0.05);" onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)';">
                     <div style="height: 180px; overflow: hidden;">
                         <?php if (!empty($news['image'])): ?>
@@ -2382,7 +2382,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
             <h2 style="font-size: 24px; font-weight: 700; color: #2c3e50; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 3px solid #2196F3;">Community News</h2>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
                 <?php foreach (array_slice($community_news, 0, 6) as $news): ?>
-                <a href="<?php echo !empty($news['slug']) ? '/music/news/' . rawurlencode($news['slug']) : '/music/news/' . $news['id']; ?>" style="text-decoration: none; color: inherit; display: block;">
+                <a href="<?php echo !empty($news['slug']) ? base_url('news/' . rawurlencode($news['slug'])) : base_url('news/' . $news['id']); ?>" style="text-decoration: none; color: inherit; display: block;">
                 <div style="background: white; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.3s; box-shadow: 0 2px 8px rgba(0,0,0,0.05);" onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)';">
                     <div style="height: 180px; overflow: hidden;">
                         <?php if (!empty($news['image'])): ?>
@@ -2415,7 +2415,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
             <h2 style="font-size: 24px; font-weight: 700; color: #2c3e50; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 3px solid #2196F3;">Entertainment</h2>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
                 <?php foreach (array_slice($entertainment_news, 0, 6) as $news): ?>
-                <a href="<?php echo !empty($news['slug']) ? '/music/news/' . rawurlencode($news['slug']) : '/music/news/' . $news['id']; ?>" style="text-decoration: none; color: inherit; display: block;">
+                <a href="<?php echo !empty($news['slug']) ? base_url('news/' . rawurlencode($news['slug'])) : base_url('news/' . $news['id']); ?>" style="text-decoration: none; color: inherit; display: block;">
                 <div style="background: white; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.3s; box-shadow: 0 2px 8px rgba(0,0,0,0.05);" onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)';">
                     <div style="height: 180px; overflow: hidden;">
                         <?php if (!empty($news['image'])): ?>
@@ -2681,7 +2681,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
             <h2 style="font-size: 24px; font-weight: 700; color: #2c3e50; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 3px solid #2196F3;">Featured Stories</h2>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;">
                 <?php foreach (array_slice($featured_stories, 0, 6) as $news): ?>
-                <a href="<?php echo !empty($news['slug']) ? '/music/news/' . rawurlencode($news['slug']) : '/music/news/' . $news['id']; ?>" style="text-decoration: none; color: inherit; display: block;">
+                <a href="<?php echo !empty($news['slug']) ? base_url('news/' . rawurlencode($news['slug'])) : base_url('news/' . $news['id']); ?>" style="text-decoration: none; color: inherit; display: block;">
                 <div style="background: white; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.3s; box-shadow: 0 2px 8px rgba(0,0,0,0.05);" onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)';">
                     <div style="height: 180px; overflow: hidden;">
                         <?php if (!empty($news['image'])): ?>
