@@ -123,11 +123,12 @@ if (!function_exists('asset_path')) {
         }
         $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-        $baseUrl = $protocol . $host;
+        $base_path = defined('BASE_PATH') ? BASE_PATH : '/';
+        $baseUrl = $protocol . $host . $base_path;
         if (strpos($path, '/') === 0) {
-            return $baseUrl . $path;
+            return $baseUrl . ltrim($path, '/');
         }
-        return $baseUrl . '/music/' . ltrim($path, '/');
+        return $baseUrl . ltrim($path, '/');
     }
 }
 ?>

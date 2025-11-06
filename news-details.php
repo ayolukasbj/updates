@@ -194,7 +194,8 @@ try {
 // Build current absolute URL for sharing
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$requestUri = $_SERVER['REQUEST_URI'] ?? ('/music/news-details.php?id=' . urlencode($actual_news_id));
+$base_path = defined('BASE_PATH') ? BASE_PATH : '/';
+$requestUri = $_SERVER['REQUEST_URI'] ?? ($base_path . 'news-details.php?id=' . urlencode($actual_news_id));
 $currentUrl = $scheme . '://' . $host . $requestUri;
 
 // Get related news from database

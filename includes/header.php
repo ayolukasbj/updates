@@ -58,7 +58,8 @@ $user_avatar = $isLoggedIn ? getHeaderSetting('user_avatar_' . ($_SESSION['user_
 // Get current request URL for base tag (works with IP and ngrok)
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$currentBaseUrl = $protocol . $host . '/music/';
+$base_path = defined('BASE_PATH') ? BASE_PATH : '/';
+$currentBaseUrl = $protocol . $host . $base_path;
 
 // Asset path helper - only define if not already defined
 if (!function_exists('asset_path')) {
@@ -822,10 +823,12 @@ searchBox?.addEventListener('input', function() {
             basePath += '/';
         }
         
-        // Remove /music/ if present (for ngrok/IP compatibility)
-        basePath = basePath.replace(/\/music\/$/, '/').replace(/\/music$/, '/');
+        // Ensure basePath ends with /
+        if (!basePath.endsWith('/')) {
+            basePath += '/';
+        }
         
-        // Construct API URL
+        // Construct API URL using base path
         let apiUrl = window.location.origin + basePath + `api/search.php?q=${encodeURIComponent(query)}`;
         
         // Try the API call
@@ -848,12 +851,12 @@ searchBox?.addEventListener('input', function() {
             .catch(error => {
                 console.error('Search error:', error);
                 
-                // Try alternative paths
+                // Try alternative paths (without hardcoded /music/)
                 const alternativePaths = [
                     basePath + 'api/search.php',
-                    '/music/api/search.php',
                     '/api/search.php',
-                    'api/search.php'
+                    'api/search.php',
+                    window.location.origin + '/api/search.php'
                 ];
                 
                 let attempts = 0;

@@ -2,16 +2,23 @@
 // admin/api/install-update.php
 // Update Installation API
 
+// Prevent any output before JSON
+ob_start();
+
 require_once '../auth-check.php';
 require_once '../../config/config.php';
 require_once '../../config/database.php';
 
 if (!isSuperAdmin()) {
+    ob_clean();
     http_response_code(403);
+    header('Content-Type: application/json');
     echo json_encode(['success' => false, 'error' => 'Unauthorized']);
     exit;
 }
 
+// Clear any output that might have been sent
+ob_clean();
 header('Content-Type: application/json');
 
 $action = $_GET['action'] ?? '';
@@ -551,6 +558,10 @@ function finalizeUpdate($version) {
         $db = new Database();
         $conn = $db->getConnection();
         
+        if (!$conn) {
+            throw new Exception('Database connection failed');
+        }
+        
         // Update version in settings
         $stmt = $conn->prepare("
             INSERT INTO settings (setting_key, setting_value) 
@@ -561,11 +572,15 @@ function finalizeUpdate($version) {
         
         logMessage("Version updated to: $version");
         
-        return ['success' => true];
+        return ['success' => true, 'message' => 'Update finalized successfully'];
+    } catch (PDOException $e) {
+        logMessage("Warning: Could not update version in database: " . $e->getMessage());
+        // Not critical, continue - version update is optional
+        return ['success' => true, 'message' => 'Update finalized (version not saved to database)', 'warning' => 'Database update skipped'];
     } catch (Exception $e) {
         logMessage("Warning: Could not update version in database: " . $e->getMessage());
         // Not critical, continue
-        return ['success' => true];
+        return ['success' => true, 'message' => 'Update finalized (version not saved to database)', 'warning' => 'Database update skipped'];
     }
 }
 
@@ -637,12 +652,15 @@ try {
             break;
             
         case 'finalize':
+            // Clear any output before finalize
+            ob_clean();
+            
             $version = $input['version'] ?? '';
             $result = finalizeUpdate($version);
             
             // Cleanup
             if (isset($_SESSION['update_zip_path']) && file_exists($_SESSION['update_zip_path'])) {
-                unlink($_SESSION['update_zip_path']);
+                @unlink($_SESSION['update_zip_path']);
             }
             if (isset($_SESSION['update_extract_path']) && is_dir($_SESSION['update_extract_path'])) {
                 rmdir_recursive($_SESSION['update_extract_path']);
@@ -650,7 +668,9 @@ try {
             
             unset($_SESSION['update_zip_path'], $_SESSION['update_extract_path'], $_SESSION['update_version'], $_SESSION['update_url']);
             
-            echo json_encode($result);
+            // Ensure clean output for JSON
+            ob_clean();
+            echo json_encode($result, JSON_UNESCAPED_SLASHES);
             break;
             
         case 'rollback':
@@ -666,11 +686,18 @@ try {
             throw new Exception('Invalid action');
     }
 } catch (Exception $e) {
+    // Clear any output before sending error
+    ob_clean();
     http_response_code(500);
+    header('Content-Type: application/json');
     echo json_encode([
         'success' => false,
         'error' => $e->getMessage()
     ]);
     logMessage("ERROR: " . $e->getMessage());
+    exit;
 }
+
+// End output buffering
+ob_end_flush();
 
