@@ -47,6 +47,7 @@ function getHeaderSetting($key, $default = '') {
 $site_name = getHeaderSetting('site_name', SITE_NAME);
 $show_site_name = getHeaderSetting('show_site_name', '1');
 $site_logo = getHeaderSetting('site_logo', '');
+$site_favicon = getHeaderSetting('site_favicon', '');
 
 // Debug: Log logo value for troubleshooting
 if (!empty($site_logo)) {
@@ -101,6 +102,18 @@ if (!function_exists('asset_path')) {
 }
 ?>
 <base href="<?php echo htmlspecialchars($currentBaseUrl); ?>">
+<?php
+// Add favicon if set
+if (!empty($site_favicon)) {
+    $favicon_path = str_replace('../', '', $site_favicon);
+    // If it's a relative path, prepend BASE_PATH
+    if (strpos($favicon_path, 'http') !== 0 && strpos($favicon_path, '/') !== 0) {
+        $favicon_path = $base_path . $favicon_path;
+    }
+    echo '<link rel="icon" type="image/x-icon" href="' . htmlspecialchars($favicon_path) . '">' . "\n";
+    echo '<link rel="shortcut icon" type="image/x-icon" href="' . htmlspecialchars($favicon_path) . '">' . "\n";
+}
+?>
 <!DOCTYPE html>
 <?php 
 if (function_exists('renderThemeStyles')) {

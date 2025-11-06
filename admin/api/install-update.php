@@ -386,7 +386,10 @@ function installFiles($extract_path, $root_path) {
     logMessage("First file example: " . $update_files[0]['full_path']);
     
     // Exclude certain files/directories from installation
+    // IMPORTANT: Never overwrite config.php, database.php, or user uploads
     $exclude_patterns = [
+        'config/config.php',  // Protect live config from being overwritten
+        'config/database.php', // Protect database config
         '/\.git/',
         '/\.gitignore/',
         '/README\.md$/',
@@ -443,10 +446,21 @@ function installFiles($extract_path, $root_path) {
         // Skip excluded files
         $skip = false;
         foreach ($exclude_patterns as $pattern) {
-            if (preg_match($pattern, $relative_path)) {
-                $skip = true;
-                logMessage("Skipping excluded file: $relative_path");
-                break;
+            // Check if pattern is a regex (starts with /) or exact match
+            if (strpos($pattern, '/') === 0) {
+                // Regex pattern
+                if (preg_match($pattern, $relative_path)) {
+                    $skip = true;
+                    logMessage("Skipping excluded file (regex): $relative_path");
+                    break;
+                }
+            } else {
+                // Exact match or starts with
+                if ($relative_path === $pattern || strpos($relative_path, $pattern) === 0) {
+                    $skip = true;
+                    logMessage("Skipping excluded file (exact): $relative_path");
+                    break;
+                }
             }
         }
         if ($skip) {

@@ -11,23 +11,63 @@ define('SITE_SLOGAN', 'am testing');
 define('SITE_DESCRIPTION', '');
 
 // Auto-detect SITE_URL and BASE_PATH
-$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
-$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+// First, check if base_url and base_path are set in database settings (admin override)
+$base_url_override = null;
+$base_path_override = null;
 
-// Auto-detect base path from script location
-$script_path = dirname($_SERVER['SCRIPT_NAME'] ?? '');
-$base_path = $script_path === '/' ? '/' : rtrim($script_path, '/') . '/';
-
-// If installed in root, base_path should be '/'
-if (strpos($script_path, '/admin') !== false) {
-    // We're in admin folder, go up one level
-    $base_path = dirname($script_path) === '/' ? '/' : dirname($script_path) . '/';
-} elseif ($script_path === '/' || empty($script_path)) {
-    $base_path = '/';
+try {
+    if (file_exists(__DIR__ . '/database.php')) {
+        require_once __DIR__ . '/database.php';
+        $db = new Database();
+        $conn = $db->getConnection();
+        if ($conn) {
+            $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = ?");
+            $stmt->execute(['base_url']);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($result && !empty($result['setting_value'])) {
+                $base_url_override = $result['setting_value'];
+            }
+            
+            $stmt->execute(['base_path']);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($result && !empty($result['setting_value'])) {
+                $base_path_override = $result['setting_value'];
+            }
+        }
+    }
+} catch (Exception $e) {
+    // Ignore errors - use auto-detection
+    error_log("Could not load base URL/path from database: " . $e->getMessage());
 }
 
-define('SITE_URL', $protocol . $host . $base_path);
-define('BASE_PATH', $base_path);
+// Use override if set, otherwise auto-detect
+if ($base_url_override) {
+    define('SITE_URL', rtrim($base_url_override, '/') . '/');
+    define('BASE_PATH', $base_path_override ?: '/');
+} else {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+
+    // Auto-detect base path from script location
+    $script_path = dirname($_SERVER['SCRIPT_NAME'] ?? '');
+    $base_path = $script_path === '/' ? '/' : rtrim($script_path, '/') . '/';
+
+    // If installed in root, base_path should be '/'
+    if (strpos($script_path, '/admin') !== false) {
+        // We're in admin folder, go up one level
+        $base_path = dirname($script_path) === '/' ? '/' : dirname($script_path) . '/';
+    } elseif ($script_path === '/' || empty($script_path)) {
+        $base_path = '/';
+    }
+
+    // Use override if set
+    if ($base_path_override) {
+        $base_path = $base_path_override;
+    }
+
+    define('SITE_URL', $protocol . $host . $base_path);
+    define('BASE_PATH', $base_path);
+}
 
 // Database Configuration
 define('DB_HOST', 'localhost');
