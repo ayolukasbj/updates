@@ -112,13 +112,33 @@ class AuthController {
                     $_SESSION['error_message'] = 'Please verify your email before logging in.';
                 } else {
                     $_SESSION['success_message'] = 'Welcome back!';
-                    // Redirect to dashboard or homepage
-                    $redirect_url = defined('SITE_URL') ? SITE_URL . '/dashboard.php' : '/dashboard.php';
+                    // Redirect to dashboard or homepage - use relative URL to avoid issues
+                    $redirect_url = 'dashboard.php';
+                    
+                    // Try redirect function first
                     if (function_exists('redirect')) {
-                        redirect($redirect_url);
+                        try {
+                            redirect($redirect_url);
+                        } catch (Exception $e) {
+                            error_log('Redirect function error: ' . $e->getMessage());
+                            // Fallback to header redirect
+                            if (!headers_sent()) {
+                                header('Location: ' . $redirect_url);
+                                exit;
+                            } else {
+                                echo '<script>window.location.href = "' . htmlspecialchars($redirect_url) . '";</script>';
+                                exit;
+                            }
+                        }
                     } else {
-                        header('Location: ' . $redirect_url);
-                        exit;
+                        // Use header redirect
+                        if (!headers_sent()) {
+                            header('Location: ' . $redirect_url);
+                            exit;
+                        } else {
+                            echo '<script>window.location.href = "' . htmlspecialchars($redirect_url) . '";</script>';
+                            exit;
+                        }
                     }
                 }
                 } else {

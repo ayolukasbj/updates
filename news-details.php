@@ -9,6 +9,24 @@ error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
+// Register shutdown function to catch fatal errors
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error !== NULL && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        error_log("FATAL ERROR in news-details.php: " . $error['message'] . " in " . $error['file'] . " on line " . $error['line']);
+        if (!headers_sent()) {
+            http_response_code(500);
+            header('Content-Type: text/html; charset=utf-8');
+        }
+        echo '<!DOCTYPE html><html><head><title>Error</title><meta charset="UTF-8"></head><body>';
+        echo '<h1>Error Loading News Page</h1>';
+        echo '<p>Please check the error logs for details.</p>';
+        echo '<p><a href="news.php">Go to News Listing</a></p>';
+        echo '</body></html>';
+        exit;
+    }
+});
+
 // Start output buffering only if not already started (prevents nested buffers)
 $ob_started_here = false;
 if (ob_get_level() == 0) {
@@ -553,14 +571,34 @@ try {
 </head>
 <body>
     <?php 
-    $header_path = $base_dir . '/includes/header.php';
-    if (!file_exists($header_path)) {
-        $header_path = 'includes/header.php';
-    }
-    if (file_exists($header_path)) {
-        include $header_path;
-    } else {
-        error_log('Warning: includes/header.php not found');
+    // Include header with robust error handling
+    // Skip maintenance check in header to avoid double-checking
+    define('SKIP_MAINTENANCE_CHECK', true);
+    
+    try {
+        $header_path = $base_dir . '/includes/header.php';
+        if (!file_exists($header_path)) {
+            $header_path = 'includes/header.php';
+        }
+        if (!file_exists($header_path)) {
+            // Try absolute path from document root
+            $header_path = $_SERVER['DOCUMENT_ROOT'] . '/includes/header.php';
+        }
+        if (file_exists($header_path)) {
+            include $header_path;
+        } else {
+            error_log('Warning: includes/header.php not found. Tried: ' . $base_dir . '/includes/header.php, includes/header.php, ' . ($_SERVER['DOCUMENT_ROOT'] ?? '') . '/includes/header.php');
+            // Define minimal header if header.php is missing
+            if (!function_exists('renderThemeStyles')) {
+                function renderThemeStyles() { return ''; }
+            }
+        }
+    } catch (Exception $e) {
+        error_log('Error including header.php in news-details.php: ' . $e->getMessage());
+        // Continue without header if it fails
+    } catch (Error $e) {
+        error_log('Fatal error including header.php in news-details.php: ' . $e->getMessage() . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
+        // Continue without header if it fails
     }
     ?>
 

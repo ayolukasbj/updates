@@ -62,12 +62,23 @@ try {
 }
 
 // Check user role and redirect accordingly
-$stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
-$stmt->execute([$user_id]);
-$user = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$user) {
-    redirect('login.php');
+try {
+    $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
+    $stmt->execute([$user_id]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if (!$user) {
+        if (function_exists('redirect')) {
+            redirect('login.php');
+        } else {
+            header('Location: login.php');
+            exit;
+        }
+    }
+} catch (Exception $e) {
+    error_log('Error fetching user in dashboard.php: ' . $e->getMessage());
+    http_response_code(500);
+    die('Error loading user data. Please check error logs.');
 }
 
 // Check if admin is impersonating - don't redirect if impersonating
