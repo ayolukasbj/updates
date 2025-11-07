@@ -122,7 +122,9 @@ try {
         if ($has_featured_image) {
             $stmt = $conn->prepare("
                 SELECT n.*, COALESCE(u.username, 'Unknown') as author,
-                       COALESCE(n.featured_image, n.image) as display_image
+                       COALESCE(n.featured_image, n.image) as display_image,
+                       n.featured_image,
+                       n.image
                 FROM news n 
                 LEFT JOIN users u ON n.author_id = u.id 
                 WHERE n.slug = ? AND n.is_published = 1
@@ -154,7 +156,9 @@ try {
             if ($has_featured_image) {
                 $stmt = $conn->prepare("
                     SELECT n.*, COALESCE(u.username, 'Unknown') as author,
-                           COALESCE(n.featured_image, n.image) as display_image
+                           COALESCE(n.featured_image, n.image) as display_image,
+                           n.featured_image,
+                           n.image
                     FROM news n 
                     LEFT JOIN users u ON n.author_id = u.id 
                     WHERE n.title LIKE ? AND n.is_published = 1
@@ -177,7 +181,9 @@ try {
         if ($has_featured_image) {
             $stmt = $conn->prepare("
                 SELECT n.*, COALESCE(u.username, 'Unknown') as author,
-                       COALESCE(n.featured_image, n.image) as display_image
+                       COALESCE(n.featured_image, n.image) as display_image,
+                       n.featured_image,
+                       n.image
                 FROM news n 
                 LEFT JOIN users u ON n.author_id = u.id 
                 WHERE n.id = ? AND n.is_published = 1
@@ -1243,11 +1249,12 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 <!-- Featured Image -->
                 <?php 
                 // Get featured image - check multiple possible field names
+                // Priority: display_image (from COALESCE query) > featured_image > image
                 $featured_img = '';
-                if (!empty($news_item['featured_image'])) {
-                    $featured_img = $news_item['featured_image'];
-                } elseif (!empty($news_item['display_image'])) {
+                if (!empty($news_item['display_image'])) {
                     $featured_img = $news_item['display_image'];
+                } elseif (!empty($news_item['featured_image'])) {
+                    $featured_img = $news_item['featured_image'];
                 } elseif (!empty($news_item['image'])) {
                     $featured_img = $news_item['image'];
                 }
@@ -1261,6 +1268,8 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 
                 if (!empty($featured_img)): 
                     $img_url = asset_path($featured_img);
+                    // Debug: log the image URL
+                    error_log('News details image URL: ' . $img_url . ' (from field: ' . ($news_item['display_image'] ? 'display_image' : ($news_item['featured_image'] ? 'featured_image' : 'image')) . ')');
                 ?>
                 <div class="article-featured-image">
                     <img src="<?php echo htmlspecialchars($img_url); ?>" 
@@ -1268,6 +1277,11 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                          style="max-width: 100%; height: auto; display: block;"
                          onerror="console.error('Image failed to load: <?php echo htmlspecialchars($img_url); ?>'); this.style.display='none';">
                 </div>
+                <?php else: ?>
+                <!-- Debug: No image found -->
+                <!-- display_image: <?php echo htmlspecialchars($news_item['display_image'] ?? 'empty'); ?> -->
+                <!-- featured_image: <?php echo htmlspecialchars($news_item['featured_image'] ?? 'empty'); ?> -->
+                <!-- image: <?php echo htmlspecialchars($news_item['image'] ?? 'empty'); ?> -->
                 <?php endif; ?>
 
                 <!-- Article Body -->
@@ -1413,14 +1427,56 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     <h3>Newsletter</h3>
                     <div class="subscribe-form">
                         <p>Subscribe to our mailing list to receives daily updates direct to your inbox!</p>
-                        <form method="POST" action="api/subscribe.php" style="margin-bottom: 10px;">
+                        <form id="newsletterForm" method="POST" action="api/newsletter-subscribe.php" style="margin-bottom: 10px;">
                             <div class="subscribe-input-group">
-                                <input type="email" name="email" class="subscribe-input" placeholder="Your email address" required>
-                                <button type="submit" class="subscribe-btn">SIGN UP</button>
+                                <input type="email" name="email" id="newsletterEmail" class="subscribe-input" placeholder="Your email address" required>
+                                <button type="submit" class="subscribe-btn" id="newsletterSubmit">SIGN UP</button>
                             </div>
+                            <div id="newsletterMessage" style="margin-top: 10px; font-size: 14px;"></div>
                         </form>
                         <p class="subscribe-disclaimer">*we hate spam as much as you do</p>
                     </div>
+                    <script>
+                    document.getElementById('newsletterForm').addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        const form = this;
+                        const submitBtn = document.getElementById('newsletterSubmit');
+                        const messageDiv = document.getElementById('newsletterMessage');
+                        const email = document.getElementById('newsletterEmail').value;
+                        
+                        submitBtn.disabled = true;
+                        submitBtn.textContent = 'Subscribing...';
+                        messageDiv.innerHTML = '';
+                        
+                        fetch('api/newsletter-subscribe.php', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                            },
+                            body: 'email=' + encodeURIComponent(email)
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                messageDiv.style.color = '#28a745';
+                                messageDiv.innerHTML = data.message || 'Thank you for subscribing!';
+                                form.reset();
+                            } else {
+                                messageDiv.style.color = '#dc3545';
+                                messageDiv.innerHTML = data.error || 'Subscription failed. Please try again.';
+                            }
+                        })
+                        .catch(error => {
+                            messageDiv.style.color = '#dc3545';
+                            messageDiv.innerHTML = 'An error occurred. Please try again later.';
+                            console.error('Error:', error);
+                        })
+                        .finally(() => {
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'SIGN UP';
+                        });
+                    });
+                    </script>
                 </div>
 
                 <!-- Recent News - Large Featured -->
