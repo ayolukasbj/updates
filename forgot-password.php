@@ -1,6 +1,6 @@
 <?php
-// register.php
-// Registration page
+// forgot-password.php
+// Forgot password page
 
 // Error handling
 error_reporting(E_ALL);
@@ -32,14 +32,14 @@ try {
     if (ob_get_level() > 0) {
         ob_end_clean();
     }
-    error_log('Register.php config error: ' . $e->getMessage());
+    error_log('Forgot-password.php config error: ' . $e->getMessage());
     http_response_code(500);
     die('Error: ' . htmlspecialchars($e->getMessage()));
 } catch (Error $e) {
     if (ob_get_level() > 0) {
         ob_end_clean();
     }
-    error_log('Register.php fatal error: ' . $e->getMessage());
+    error_log('Forgot-password.php fatal error: ' . $e->getMessage());
     http_response_code(500);
     die('Fatal error. Please check error logs.');
 }
@@ -69,7 +69,7 @@ try {
     }
     
     $auth = new AuthController();
-    $auth->register();
+    $auth->forgotPassword();
     
     // Flush output if no redirect happened
     if (ob_get_level() > 0) {
@@ -79,7 +79,7 @@ try {
     if (ob_get_level() > 0) {
         ob_end_clean();
     }
-    error_log('Register.php AuthController error: ' . $e->getMessage());
+    error_log('Forgot-password.php AuthController error: ' . $e->getMessage());
     error_log('Stack trace: ' . $e->getTraceAsString());
     http_response_code(500);
     die('Error loading authentication: ' . htmlspecialchars($e->getMessage()));
@@ -87,7 +87,7 @@ try {
     if (ob_get_level() > 0) {
         ob_end_clean();
     }
-    error_log('Register.php fatal error: ' . $e->getMessage());
+    error_log('Forgot-password.php fatal error: ' . $e->getMessage());
     error_log('Stack trace: ' . $e->getTraceAsString());
     http_response_code(500);
     die('Fatal error. Please check error logs.');

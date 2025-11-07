@@ -110,7 +110,8 @@ $news_item = null;
 try {
     if (!empty($news_slug)) {
         $stmt = $conn->prepare("
-            SELECT n.*, COALESCE(u.username, 'Unknown') as author 
+            SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                   COALESCE(n.featured_image, n.image) as featured_image
             FROM news n 
             LEFT JOIN users u ON n.author_id = u.id 
             WHERE n.slug = ? AND n.is_published = 1
@@ -130,7 +131,8 @@ try {
         if (!$news_item) {
             $title_search = str_replace('-', ' ', $news_slug);
             $stmt = $conn->prepare("
-                SELECT n.*, COALESCE(u.username, 'Unknown') as author 
+                SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                       COALESCE(n.featured_image, n.image) as featured_image
                 FROM news n 
                 LEFT JOIN users u ON n.author_id = u.id 
                 WHERE n.title LIKE ? AND n.is_published = 1
@@ -141,7 +143,8 @@ try {
         }
     } elseif (!empty($news_id)) {
         $stmt = $conn->prepare("
-            SELECT n.*, COALESCE(u.username, 'Unknown') as author 
+            SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                   COALESCE(n.featured_image, n.image) as featured_image
             FROM news n 
             LEFT JOIN users u ON n.author_id = u.id 
             WHERE n.id = ? AND n.is_published = 1
@@ -261,6 +264,26 @@ if (!function_exists('asset_path')) {
         return $base . '/' . ltrim($path, '/');
     }
 }
+
+// Get social media links from admin settings
+function getSocialLinks($conn) {
+    try {
+        $stmt = $conn->prepare("SELECT setting_key, setting_value FROM settings WHERE setting_key LIKE 'social_%'");
+        $stmt->execute();
+        $settings = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        return [
+            'twitter' => $settings['social_twitter'] ?? '',
+            'instagram' => $settings['social_instagram'] ?? '',
+            'facebook' => $settings['social_facebook'] ?? '',
+            'youtube' => $settings['social_youtube'] ?? '',
+            'tiktok' => $settings['social_tiktok'] ?? '',
+        ];
+    } catch (Exception $e) {
+        return [];
+    }
+}
+
+$social_links = getSocialLinks($conn);
 
 // Helper function for display ad
 if (!function_exists('displayAd')) {
@@ -496,6 +519,12 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             line-height: 1.85;
             color: #333;
             margin: 30px 0;
+            padding: 0 40px;
+        }
+        @media (max-width: 768px) {
+            .article-body {
+                padding: 0 20px;
+            }
         }
         .article-body p {
             margin-bottom: 24px;
@@ -1133,10 +1162,13 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 </div>
 
                 <!-- Featured Image -->
-                <?php if (!empty($news_item['featured_image'])): ?>
+                <?php 
+                $featured_img = !empty($news_item['featured_image']) ? $news_item['featured_image'] : (!empty($news_item['image']) ? $news_item['image'] : '');
+                if (!empty($featured_img)): ?>
                 <div class="article-featured-image">
-                    <img src="<?php echo htmlspecialchars(asset_path($news_item['featured_image'])); ?>" 
-                         alt="<?php echo htmlspecialchars($news_item['title']); ?>">
+                    <img src="<?php echo htmlspecialchars(asset_path($featured_img)); ?>" 
+                         alt="<?php echo htmlspecialchars($news_item['title']); ?>"
+                         onerror="this.style.display='none';">
                 </div>
                 <?php endif; ?>
 
@@ -1355,41 +1387,41 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 <?php endif; ?>
 
                 <!-- Social Media Followers -->
+                <?php if (!empty($social_links['twitter']) || !empty($social_links['instagram']) || !empty($social_links['facebook']) || !empty($social_links['youtube'])): ?>
                 <div class="sidebar-widget">
                     <h3>Stay Connected</h3>
                     <div class="social-followers">
-                        <div class="social-item">
+                        <?php if (!empty($social_links['twitter'])): ?>
+                        <a href="<?php echo htmlspecialchars($social_links['twitter']); ?>" target="_blank" class="social-item" style="text-decoration: none; color: inherit;">
                             <i class="fab fa-x-twitter"></i>
-                            <div class="count">360</div>
-                            <div class="label">Followers</div>
-                        </div>
-                        <div class="social-item">
+                            <div class="count">Follow</div>
+                            <div class="label">Twitter</div>
+                        </a>
+                        <?php endif; ?>
+                        <?php if (!empty($social_links['instagram'])): ?>
+                        <a href="<?php echo htmlspecialchars($social_links['instagram']); ?>" target="_blank" class="social-item" style="text-decoration: none; color: inherit;">
                             <i class="fab fa-instagram"></i>
-                            <div class="count">85.8k</div>
-                            <div class="label">Followers</div>
-                        </div>
-                        <div class="social-item">
-                            <i class="fab fa-vk"></i>
-                            <div class="count">140.6k</div>
-                            <div class="label">Followers</div>
-                        </div>
-                        <div class="social-item">
-                            <i class="fab fa-behance"></i>
-                            <div class="count">139</div>
-                            <div class="label">Followers</div>
-                        </div>
-                        <div class="social-item">
-                            <i class="fab fa-soundcloud"></i>
-                            <div class="count">23.9k</div>
-                            <div class="label">Followers</div>
-                        </div>
-                        <div class="social-item">
-                            <i class="fas fa-rss"></i>
-                            <div class="count">1.2k</div>
-                            <div class="label">Subscribers</div>
-                        </div>
+                            <div class="count">Follow</div>
+                            <div class="label">Instagram</div>
+                        </a>
+                        <?php endif; ?>
+                        <?php if (!empty($social_links['facebook'])): ?>
+                        <a href="<?php echo htmlspecialchars($social_links['facebook']); ?>" target="_blank" class="social-item" style="text-decoration: none; color: inherit;">
+                            <i class="fab fa-facebook-f"></i>
+                            <div class="count">Follow</div>
+                            <div class="label">Facebook</div>
+                        </a>
+                        <?php endif; ?>
+                        <?php if (!empty($social_links['youtube'])): ?>
+                        <a href="<?php echo htmlspecialchars($social_links['youtube']); ?>" target="_blank" class="social-item" style="text-decoration: none; color: inherit;">
+                            <i class="fab fa-youtube"></i>
+                            <div class="count">Subscribe</div>
+                            <div class="label">YouTube</div>
+                        </a>
+                        <?php endif; ?>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <?php
                 // Display sidebar ad if exists
