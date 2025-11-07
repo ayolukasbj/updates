@@ -17,8 +17,11 @@ if (ob_get_level() == 0) {
     ob_start();
 }
 
-// Load config with error handling
+// Load config with error handling (but skip login verification checks)
 try {
+    // Define a flag to skip verification checks during email verification
+    define('SKIP_VERIFICATION_CHECK', true);
+    
     if (!file_exists('config/config.php')) {
         throw new Exception('Configuration file not found. Please run the installation.');
     }

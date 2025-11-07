@@ -179,23 +179,33 @@ class EmailHelper {
             $mail->addCustomHeader('Message-ID', '<' . time() . '.' . md5($to . $subject) . '@' . $domain . '>');
             $mail->addCustomHeader('Date', date('r'));
             $mail->addCustomHeader('X-Mailer', 'PHP/' . phpversion());
-            $mail->addCustomHeader('X-Priority', '3');
-            $mail->addCustomHeader('X-MSMail-Priority', 'Normal');
-            $mail->addCustomHeader('Importance', 'Normal');
-            
-            // List management headers
-            $mail->addCustomHeader('List-Unsubscribe', '<' . (defined('SITE_URL') ? SITE_URL : '') . '/unsubscribe>');
-            $mail->addCustomHeader('List-Unsubscribe-Post', 'List-Unsubscribe=One-Click');
-            
-            // Authentication headers
-            $mail->addCustomHeader('Authentication-Results', $domain . '; auth=pass');
+            // Removed X-Priority, X-MSMail-Priority, Importance headers - can trigger spam filters
+            // Removed List-Unsubscribe headers for transactional emails
             
             // Content language
             $mail->addCustomHeader('Content-Language', 'en-US');
             
-            // Remove Precedence: bulk as it can trigger spam filters
-            // Instead, use Return-Path for better deliverability
-            $mail->addCustomHeader('Return-Path', $from_email);
+            // Set Sender for Return-Path (better than header)
+            if (!empty($from_email)) {
+                $mail->Sender = $from_email;
+            }
+            
+            // Set Reply-To
+            if (!empty($settings['reply_to_email'])) {
+                $mail->addReplyTo($settings['reply_to_email']);
+            } else {
+                $mail->addReplyTo($from_email);
+            }
+            
+            // Fix domain for Message-ID if localhost
+            if (empty($domain) || $domain === 'localhost' || $domain === '127.0.0.1') {
+                $domain = 'example.com';
+                $message_id = '<' . time() . '.' . md5($to . $subject . time()) . '@' . $domain . '>';
+                $mail->addCustomHeader('Message-ID', $message_id);
+            }
+            
+            // Use quoted-printable encoding for better compatibility
+            $mail->Encoding = 'quoted-printable';
             
             $mail->send();
             error_log("Email sent successfully via SMTP to: $to");
@@ -234,24 +244,22 @@ class EmailHelper {
         
         // Anti-spam headers - Improved
         $domain = parse_url(defined('SITE_URL') ? SITE_URL : 'http://localhost', PHP_URL_HOST);
-        $email_headers .= "X-Priority: 3" . "\r\n";
-        $email_headers .= "X-MSMail-Priority: Normal" . "\r\n";
-        $email_headers .= "Importance: Normal" . "\r\n";
+        // Removed X-Priority, X-MSMail-Priority, and Importance headers as they can trigger spam filters
         // Removed Precedence: bulk as it can trigger spam filters
         $email_headers .= "Content-Language: en-US" . "\r\n";
-        $email_headers .= "Return-Path: " . $from_email . "\r\n";
         
-        // Message-ID for better deliverability
-        $message_id = '<' . time() . '.' . md5($to . $subject) . '@' . ($domain !== 'localhost' ? $domain : 'example.com') . '>';
+        // Message-ID for better deliverability (use valid domain)
+        if (empty($domain) || $domain === 'localhost' || $domain === '127.0.0.1') {
+            $domain = 'example.com';
+        }
+        $message_id = '<' . time() . '.' . md5($to . $subject . time()) . '@' . $domain . '>';
         $email_headers .= "Message-ID: " . $message_id . "\r\n";
         
-        // Date header
+        // Date header (important for deliverability)
         $email_headers .= "Date: " . date('r') . "\r\n";
         
-        // Authentication headers - only add if domain is valid
-        if (!empty($domain) && $domain !== 'localhost') {
-            $email_headers .= "Authentication-Results: " . $domain . "; auth=pass" . "\r\n";
-        }
+        // Return-Path (use -f flag in mail() instead)
+        // The -f flag will be passed to mail() function
         
         // Add custom headers
         if (!empty($headers)) {
@@ -260,8 +268,9 @@ class EmailHelper {
             }
         }
         
-        // Try to send email
-        $sent = @mail($to, $subject, $message, $email_headers);
+        // Try to send email with Return-Path using -f flag
+        $additional_params = '-f' . $from_email;
+        $sent = @mail($to, $subject, $message, $email_headers, $additional_params);
         
         // Log the attempt
         if ($sent) {

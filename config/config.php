@@ -149,6 +149,11 @@ function is_logged_in() {
         return false;
     }
     
+    // Skip verification check if flag is set (e.g., during email verification process)
+    if (defined('SKIP_VERIFICATION_CHECK') && SKIP_VERIFICATION_CHECK) {
+        return true;
+    }
+    
     // Check email verification if required
     return is_user_verified();
 }
@@ -157,62 +162,79 @@ function is_logged_in() {
  * Check if current user's email is verified (or verification is not required)
  */
 function is_user_verified() {
+    // Skip verification check if flag is set
+    if (defined('SKIP_VERIFICATION_CHECK') && SKIP_VERIFICATION_CHECK) {
+        return true;
+    }
+    
     if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
         return false;
     }
     
     // Check if email verification is required
     try {
-        if (file_exists(__DIR__ . '/database.php')) {
-            require_once __DIR__ . '/database.php';
-            $db = new Database();
-            $conn = $db->getConnection();
-            
-            if ($conn) {
-                // Check if email verification is required
-                $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'require_email_verification'");
-                $stmt->execute();
-                $result = $stmt->fetch(PDO::FETCH_ASSOC);
-                $require_verification = ($result['setting_value'] ?? 'false') === 'true' || ($result['setting_value'] ?? '0') === '1';
-                
-                if (!$require_verification) {
-                    // Verification not required, user is considered verified
-                    return true;
-                }
-                
-                // Verification is required, check user's verification status
-                // Check both email_verified and is_verified columns (for backward compatibility)
-                $user_stmt = $conn->prepare("
-                    SELECT email_verified, is_verified, role 
-                    FROM users 
-                    WHERE id = ? AND is_active = 1
-                ");
-                $user_stmt->execute([$_SESSION['user_id']]);
-                $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
-                
-                if (!$user) {
-                    // User not found or inactive
-                    return false;
-                }
-                
-                // Admin and super_admin bypass email verification
-                if (in_array($user['role'] ?? '', ['admin', 'super_admin'])) {
-                    return true;
-                }
-                
-                // Check verification status
-                $is_verified = false;
-                if (isset($user['email_verified'])) {
-                    $is_verified = (bool)$user['email_verified'];
-                } elseif (isset($user['is_verified'])) {
-                    $is_verified = (bool)$user['is_verified'];
-                }
-                
-                return $is_verified;
+        // Use static variable to cache database connection
+        static $db = null;
+        static $conn = null;
+        
+        if ($db === null || $conn === null) {
+            if (file_exists(__DIR__ . '/database.php')) {
+                require_once __DIR__ . '/database.php';
+                $db = new Database();
+                $conn = $db->getConnection();
             }
+        }
+        
+        if ($conn) {
+            // Check if email verification is required
+            $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'require_email_verification'");
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            $require_verification = ($result['setting_value'] ?? 'false') === 'true' || ($result['setting_value'] ?? '0') === '1';
+            
+            if (!$require_verification) {
+                // Verification not required, user is considered verified
+                return true;
+            }
+            
+            // Verification is required, check user's verification status
+            // Check both email_verified and is_verified columns (for backward compatibility)
+            $user_stmt = $conn->prepare("
+                SELECT email_verified, is_verified, role, is_active
+                FROM users 
+                WHERE id = ?
+            ");
+            $user_stmt->execute([$_SESSION['user_id']]);
+            $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$user || empty($user['is_active'])) {
+                // User not found or inactive
+                return false;
+            }
+            
+            // Admin and super_admin bypass email verification
+            if (in_array($user['role'] ?? '', ['admin', 'super_admin'])) {
+                return true;
+            }
+            
+            // Check verification status
+            $is_verified = false;
+            if (isset($user['email_verified']) && !is_null($user['email_verified'])) {
+                $is_verified = (bool)$user['email_verified'];
+            } elseif (isset($user['is_verified']) && !is_null($user['is_verified'])) {
+                $is_verified = (bool)$user['is_verified'];
+            }
+            
+            return $is_verified;
         }
     } catch (Exception $e) {
         error_log('Error checking email verification: ' . $e->getMessage());
+        error_log('Stack trace: ' . $e->getTraceAsString());
+        // On error, allow access (fail open) to prevent locking users out
+        return true;
+    } catch (Error $e) {
+        error_log('Fatal error checking email verification: ' . $e->getMessage());
+        error_log('Stack trace: ' . $e->getTraceAsString());
         // On error, allow access (fail open) to prevent locking users out
         return true;
     }
