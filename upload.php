@@ -2,80 +2,128 @@
 // upload.php
 // Upload music page with MDUNDO-style design
 
+// Error handling - MUST be first
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
 // Prevent output buffering issues
 if (ob_get_level() == 0) {
     ob_start();
 }
 
-// Error handling
-error_reporting(E_ALL);
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
+// Set up fatal error handler
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error !== NULL && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
+        ob_clean();
+        error_log("Fatal error in upload.php: " . $error['message'] . " in " . $error['file'] . " on line " . $error['line']);
+        http_response_code(500);
+        echo '<!DOCTYPE html><html><head><title>Error</title><meta charset="UTF-8"></head><body style="font-family:Arial;text-align:center;padding:50px;"><h1 style="color:#dc3545;">Upload Page Error</h1><p>An error occurred. Please try again later.</p></body></html>';
+        exit;
+    }
+});
 
 try {
-    require_once 'config/config.php';
-    require_once 'includes/song-storage.php';
+    // Load config files
+    if (!file_exists(__DIR__ . '/config/config.php')) {
+        throw new Exception('Configuration file not found at: ' . __DIR__ . '/config/config.php');
+    }
+    require_once __DIR__ . '/config/config.php';
+    
+    if (!file_exists(__DIR__ . '/includes/song-storage.php')) {
+        throw new Exception('Song storage file not found');
+    }
+    require_once __DIR__ . '/includes/song-storage.php';
 } catch (Exception $e) {
     error_log("Error loading config in upload.php: " . $e->getMessage());
+    ob_clean();
     http_response_code(500);
-    die("Configuration error. Please check error logs.");
+    echo '<!DOCTYPE html><html><head><title>Configuration Error</title><meta charset="UTF-8"></head><body style="font-family:Arial;text-align:center;padding:50px;"><h1 style="color:#dc3545;">Configuration Error</h1><p>Please contact the administrator.</p></body></html>';
+    exit;
+} catch (Error $e) {
+    error_log("Fatal error loading config in upload.php: " . $e->getMessage());
+    ob_clean();
+    http_response_code(500);
+    echo '<!DOCTYPE html><html><head><title>Fatal Error</title><meta charset="UTF-8"></head><body style="font-family:Arial;text-align:center;padding:50px;"><h1 style="color:#dc3545;">Fatal Error</h1><p>Please contact the administrator.</p></body></html>';
+    exit;
 }
 
 // Redirect if not logged in and verified (skip if already checked in including file)
 if (!isset($editing_song)) {
     try {
-        require_login();
+        // Check if function exists before calling
+        if (!function_exists('require_login')) {
+            error_log("require_login() function not found in upload.php");
+            // Fallback: check session manually
+            if (empty($_SESSION['user_id'])) {
+                $login_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/login.php' : '/login.php';
+                if (!headers_sent()) {
+                    header('Location: ' . $login_url);
+                    exit;
+                }
+            }
+        } else {
+            require_login();
+        }
     } catch (Exception $e) {
         error_log("Error in require_login() in upload.php: " . $e->getMessage());
         // Redirect to login on error
+        $login_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/login.php' : '/login.php';
         if (!headers_sent()) {
-            header('Location: ' . SITE_URL . 'login.php');
+            header('Location: ' . $login_url);
+            exit;
+        }
+    } catch (Error $e) {
+        error_log("Fatal error in require_login() in upload.php: " . $e->getMessage());
+        // Redirect to login on fatal error
+        $login_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/login.php' : '/login.php';
+        if (!headers_sent()) {
+            header('Location: ' . $login_url);
             exit;
         }
     }
 }
 
-// Check license validity - disable upload if license is invalid
-try {
-    if (file_exists(__DIR__ . '/config/license.php')) {
-        require_once 'config/license.php';
-        
-        // Check if function exists before calling
-        if (function_exists('isLicenseValid')) {
-            if (!isLicenseValid()) {
+// License check - disabled for now to prevent blocking uploads
+// Uncomment below to enable license checking
+/*
+if (file_exists(__DIR__ . '/config/license.php')) {
+    try {
+        require_once __DIR__ . '/config/license.php';
+        if (function_exists('isLicenseValid') && (!defined('ENVIRONMENT') || ENVIRONMENT !== 'development')) {
+            if (@isLicenseValid() === false) {
                 http_response_code(403);
+                $site_url = defined('SITE_URL') ? SITE_URL : '/';
                 die('
                 <!DOCTYPE html>
                 <html>
                 <head>
-                    <title>Upload Disabled - License Invalid</title>
+                    <title>Upload Disabled</title>
                     <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
                     <style>
                         body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
-                        .error-box { background: white; padding: 40px; border-radius: 10px; max-width: 600px; margin: 0 auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-                        h1 { color: #dc3545; margin-bottom: 20px; }
-                        p { color: #666; line-height: 1.8; margin-bottom: 15px; }
+                        .error-box { background: white; padding: 40px; border-radius: 10px; max-width: 600px; margin: 0 auto; }
+                        h1 { color: #dc3545; }
                         .btn { display: inline-block; padding: 12px 24px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
                     </style>
                 </head>
                 <body>
                     <div class="error-box">
                         <h1>Upload Feature Disabled</h1>
-                        <p><strong>This feature is unavailable because your license is invalid or has been deactivated.</strong></p>
-                        <p>Please activate or renew your license to use this feature.</p>
-                        <a href="' . (defined('SITE_URL') ? SITE_URL : '/') . 'admin/license-management.php" class="btn">Manage License</a>
+                        <p>Your license is invalid or has been deactivated.</p>
+                        <a href="' . htmlspecialchars($site_url) . 'admin/license-management.php" class="btn">Manage License</a>
                     </div>
                 </body>
                 </html>
                 ');
             }
         }
+    } catch (Exception $e) {
+        error_log("License check error: " . $e->getMessage());
     }
-} catch (Exception $e) {
-    error_log("Error checking license in upload.php: " . $e->getMessage());
-    // Allow upload if license check fails (fail open for now)
 }
+*/
 
 $error = '';
 $success = '';
@@ -84,13 +132,27 @@ $success = '';
 $logged_in_user_name = '';
 $is_edit_mode = false;
 try {
-    require_once 'config/database.php';
+    if (!class_exists('Database')) {
+        require_once __DIR__ . '/config/database.php';
+    }
     $db = new Database();
     $conn = $db->getConnection();
     
+    if (!$conn) {
+        throw new Exception('Database connection failed');
+    }
+    
     // First check what columns exist in users table
-    $columns_check = $conn->query("SHOW COLUMNS FROM users");
-    $columns = $columns_check->fetchAll(PDO::FETCH_COLUMN);
+    try {
+        $columns_check = $conn->query("SHOW COLUMNS FROM users");
+        if ($columns_check === false) {
+            throw new Exception('Failed to query users table columns');
+        }
+        $columns = $columns_check->fetchAll(PDO::FETCH_COLUMN);
+    } catch (PDOException $e) {
+        error_log("Error checking users table columns: " . $e->getMessage());
+        $columns = []; // Use empty array as fallback
+    }
     
     // Build query based on available columns
     $select_fields = ['username'];
@@ -114,23 +176,43 @@ try {
     $coalesce_sql = 'COALESCE(' . implode(', ', $coalesce_parts) . ') as artist_name';
     $select_sql = implode(', ', $select_fields) . ', ' . $coalesce_sql;
     
-    $stmt = $conn->prepare("SELECT $select_sql FROM users WHERE id = ?");
-    $stmt->execute([get_user_id()]);
-    $user_data = $stmt->fetch(PDO::FETCH_ASSOC);
-    if ($user_data) {
-        $logged_in_user_name = $user_data['artist_name'] ?? $user_data['username'] ?? 'Unknown Artist';
+    // Only execute query if we have columns and user ID
+    $user_id = function_exists('get_user_id') ? get_user_id() : ($_SESSION['user_id'] ?? null);
+    if ($user_id && !empty($columns)) {
+        $stmt = $conn->prepare("SELECT $select_sql FROM users WHERE id = ?");
+        if ($stmt) {
+            $stmt->execute([$user_id]);
+            $user_data = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($user_data) {
+                $logged_in_user_name = $user_data['artist_name'] ?? $user_data['username'] ?? 'Unknown Artist';
+            } else {
+                $logged_in_user_name = 'Unknown Artist';
+            }
+        } else {
+            $logged_in_user_name = 'Unknown Artist';
+        }
     } else {
         $logged_in_user_name = 'Unknown Artist';
     }
 } catch (Exception $e) {
-    // If query fails, try simple username query
+    error_log("Error getting user name in upload.php: " . $e->getMessage());
+    // Try simple username query as fallback
     try {
-        if (isset($conn)) {
-            $stmt = $conn->prepare("SELECT username FROM users WHERE id = ?");
-            $stmt->execute([get_user_id()]);
-            $user_data = $stmt->fetch(PDO::FETCH_ASSOC);
-            if ($user_data) {
-                $logged_in_user_name = $user_data['username'];
+        if (isset($conn) && $conn) {
+            $user_id = function_exists('get_user_id') ? get_user_id() : ($_SESSION['user_id'] ?? null);
+            if ($user_id) {
+                $stmt = $conn->prepare("SELECT username FROM users WHERE id = ?");
+                if ($stmt) {
+                    $stmt->execute([$user_id]);
+                    $user_data = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if ($user_data) {
+                        $logged_in_user_name = $user_data['username'] ?? 'Unknown Artist';
+                    } else {
+                        $logged_in_user_name = 'Unknown Artist';
+                    }
+                } else {
+                    $logged_in_user_name = 'Unknown Artist';
+                }
             } else {
                 $logged_in_user_name = 'Unknown Artist';
             }
@@ -138,9 +220,12 @@ try {
             $logged_in_user_name = 'Unknown Artist';
         }
     } catch (Exception $e2) {
-        error_log("Error getting user name in upload.php: " . $e2->getMessage());
+        error_log("Error in fallback user name query in upload.php: " . $e2->getMessage());
         $logged_in_user_name = 'Unknown Artist';
     }
+} catch (Error $e) {
+    error_log("Fatal error getting user name in upload.php: " . $e->getMessage());
+    $logged_in_user_name = 'Unknown Artist';
 }
 
 // Detect edit mode (from wrapper edit-song.php or submitted form)
