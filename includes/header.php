@@ -113,6 +113,113 @@ if (!defined('MAINTENANCE_CHECKED') && !defined('SKIP_MAINTENANCE_CHECK')) {
                                     line-height: 1.8;
                                 }
                             </style>
+                            
+                            <!-- Disable Copy/Right Click Protection -->
+                            <script>
+                            // Disable right-click context menu
+                            document.addEventListener('contextmenu', function(e) {
+                                e.preventDefault();
+                                return false;
+                            });
+                            
+                            // Disable text selection
+                            document.addEventListener('selectstart', function(e) {
+                                e.preventDefault();
+                                return false;
+                            });
+                            
+                            // Disable copy (Ctrl+C, Ctrl+A, Ctrl+X)
+                            document.addEventListener('keydown', function(e) {
+                                // Disable Ctrl+C (Copy)
+                                if (e.ctrlKey && e.keyCode === 67) {
+                                    e.preventDefault();
+                                    return false;
+                                }
+                                // Disable Ctrl+A (Select All)
+                                if (e.ctrlKey && e.keyCode === 65) {
+                                    e.preventDefault();
+                                    return false;
+                                }
+                                // Disable Ctrl+X (Cut)
+                                if (e.ctrlKey && e.keyCode === 88) {
+                                    e.preventDefault();
+                                    return false;
+                                }
+                                // Disable Ctrl+S (Save)
+                                if (e.ctrlKey && e.keyCode === 83) {
+                                    e.preventDefault();
+                                    return false;
+                                }
+                                // Disable Ctrl+P (Print)
+                                if (e.ctrlKey && e.keyCode === 80) {
+                                    e.preventDefault();
+                                    return false;
+                                }
+                                // Disable F12 (Developer Tools)
+                                if (e.keyCode === 123) {
+                                    e.preventDefault();
+                                    return false;
+                                }
+                                // Disable Ctrl+Shift+I (Developer Tools)
+                                if (e.ctrlKey && e.shiftKey && e.keyCode === 73) {
+                                    e.preventDefault();
+                                    return false;
+                                }
+                                // Disable Ctrl+Shift+C (Inspect Element)
+                                if (e.ctrlKey && e.shiftKey && e.keyCode === 67) {
+                                    e.preventDefault();
+                                    return false;
+                                }
+                                // Disable Ctrl+Shift+J (Console)
+                                if (e.ctrlKey && e.shiftKey && e.keyCode === 74) {
+                                    e.preventDefault();
+                                    return false;
+                                }
+                            });
+                            
+                            // Disable drag and drop
+                            document.addEventListener('dragstart', function(e) {
+                                e.preventDefault();
+                                return false;
+                            });
+                            
+                            // Clear clipboard on copy attempt
+                            document.addEventListener('copy', function(e) {
+                                e.clipboardData.setData('text/plain', '');
+                                e.preventDefault();
+                                return false;
+                            });
+                            
+                            // Disable image dragging
+                            document.addEventListener('DOMContentLoaded', function() {
+                                var images = document.querySelectorAll('img');
+                                images.forEach(function(img) {
+                                    img.addEventListener('dragstart', function(e) {
+                                        e.preventDefault();
+                                        return false;
+                                    });
+                                });
+                            });
+                            </script>
+                            
+                            <style>
+                            /* Disable text selection */
+                            body {
+                                -webkit-user-select: none;
+                                -moz-user-select: none;
+                                -ms-user-select: none;
+                                user-select: none;
+                                -webkit-touch-callout: none;
+                            }
+                            
+                            /* Allow selection in input fields and textareas */
+                            input, textarea, [contenteditable="true"] {
+                                -webkit-user-select: text;
+                                -moz-user-select: text;
+                                -ms-user-select: text;
+                                user-select: text;
+                            }
+                            </style>
                         </head>
                         <body>
                             <div class="maintenance-container">
@@ -1160,4 +1267,111 @@ searchResults?.addEventListener('click', function(event) {
     event.stopPropagation();
 });
 </script>
+
+<!-- Disable Copy/Right Click Protection -->
+<script>
+// Disable right-click context menu
+document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    return false;
+});
+
+// Disable text selection
+document.addEventListener('selectstart', function(e) {
+    e.preventDefault();
+    return false;
+});
+
+// Disable copy (Ctrl+C, Ctrl+A, Ctrl+X)
+document.addEventListener('keydown', function(e) {
+    // Disable Ctrl+C (Copy)
+    if (e.ctrlKey && e.keyCode === 67) {
+        e.preventDefault();
+        return false;
+    }
+    // Disable Ctrl+A (Select All)
+    if (e.ctrlKey && e.keyCode === 65) {
+        e.preventDefault();
+        return false;
+    }
+    // Disable Ctrl+X (Cut)
+    if (e.ctrlKey && e.keyCode === 88) {
+        e.preventDefault();
+        return false;
+    }
+    // Disable Ctrl+S (Save)
+    if (e.ctrlKey && e.keyCode === 83) {
+        e.preventDefault();
+        return false;
+    }
+    // Disable Ctrl+P (Print)
+    if (e.ctrlKey && e.keyCode === 80) {
+        e.preventDefault();
+        return false;
+    }
+    // Disable F12 (Developer Tools)
+    if (e.keyCode === 123) {
+        e.preventDefault();
+        return false;
+    }
+    // Disable Ctrl+Shift+I (Developer Tools)
+    if (e.ctrlKey && e.shiftKey && e.keyCode === 73) {
+        e.preventDefault();
+        return false;
+    }
+    // Disable Ctrl+Shift+C (Inspect Element)
+    if (e.ctrlKey && e.shiftKey && e.keyCode === 67) {
+        e.preventDefault();
+        return false;
+    }
+    // Disable Ctrl+Shift+J (Console)
+    if (e.ctrlKey && e.shiftKey && e.keyCode === 74) {
+        e.preventDefault();
+        return false;
+    }
+});
+
+// Disable drag and drop
+document.addEventListener('dragstart', function(e) {
+    e.preventDefault();
+    return false;
+});
+
+// Clear clipboard on copy attempt
+document.addEventListener('copy', function(e) {
+    e.clipboardData.setData('text/plain', '');
+    e.preventDefault();
+    return false;
+});
+
+// Disable image dragging
+document.addEventListener('DOMContentLoaded', function() {
+    var images = document.querySelectorAll('img');
+    images.forEach(function(img) {
+        img.addEventListener('dragstart', function(e) {
+            e.preventDefault();
+            return false;
+        });
+    });
+});
+</script>
+
+<style>
+/* Disable text selection */
+body {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+}
+
+/* Allow selection in input fields and textareas */
+input, textarea, [contenteditable="true"] {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+}
+</style>
 

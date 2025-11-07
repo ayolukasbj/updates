@@ -1469,6 +1469,12 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
             .music-grid > .music-card:nth-child(n+5) {
                 display: none;
             }
+            
+            /* Songs Recently Added - 2 columns on mobile */
+            .songs-recently-added-grid {
+                grid-template-columns: repeat(2, 1fr) !important;
+                gap: 15px !important;
+            }
         }
 
         .music-card {
@@ -2430,7 +2436,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                 <h2 style="font-size: 24px; font-weight: 700; color: #2c3e50; margin: 0; padding-bottom: 10px; border-bottom: 3px solid #2196F3;">Songs Recently Added</h2>
                 <a href="songs.php" style="color: #2196F3; text-decoration: none; font-weight: 600; font-size: 14px;">View All ››</a>
             </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px;">
+            <div class="songs-recently-added-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px;">
                 <?php foreach (array_slice($new_songs, 0, 12) as $song): ?>
                 <?php
                 // Generate slug if not provided
