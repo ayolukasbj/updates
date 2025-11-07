@@ -106,17 +106,38 @@ $news_slug = $_GET['slug'] ?? '';
 $news_id = $_GET['id'] ?? '';
 $news_item = null;
 
+// Check if featured_image column exists
+$has_featured_image = false;
+try {
+    $column_check = $conn->query("SHOW COLUMNS FROM news LIKE 'featured_image'");
+    $has_featured_image = $column_check->rowCount() > 0;
+} catch (Exception $e) {
+    $has_featured_image = false;
+}
+
 // Fetch news article
 try {
     if (!empty($news_slug)) {
-        $stmt = $conn->prepare("
-            SELECT n.*, COALESCE(u.username, 'Unknown') as author,
-                   COALESCE(n.featured_image, n.image) as featured_image
-            FROM news n 
-            LEFT JOIN users u ON n.author_id = u.id 
-            WHERE n.slug = ? AND n.is_published = 1
-            LIMIT 1
-        ");
+        // Build query based on whether featured_image column exists
+        if ($has_featured_image) {
+            $stmt = $conn->prepare("
+                SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                       COALESCE(n.featured_image, n.image) as display_image
+                FROM news n 
+                LEFT JOIN users u ON n.author_id = u.id 
+                WHERE n.slug = ? AND n.is_published = 1
+                LIMIT 1
+            ");
+        } else {
+            $stmt = $conn->prepare("
+                SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                       n.image as display_image
+                FROM news n 
+                LEFT JOIN users u ON n.author_id = u.id 
+                WHERE n.slug = ? AND n.is_published = 1
+                LIMIT 1
+            ");
+        }
         $stmt->execute([$news_slug]);
         $news_item = $stmt->fetch(PDO::FETCH_ASSOC);
         
@@ -130,25 +151,46 @@ try {
         
         if (!$news_item) {
             $title_search = str_replace('-', ' ', $news_slug);
-            $stmt = $conn->prepare("
-                SELECT n.*, COALESCE(u.username, 'Unknown') as author,
-                       COALESCE(n.featured_image, n.image) as featured_image
-                FROM news n 
-                LEFT JOIN users u ON n.author_id = u.id 
-                WHERE n.title LIKE ? AND n.is_published = 1
-                LIMIT 1
-            ");
+            if ($has_featured_image) {
+                $stmt = $conn->prepare("
+                    SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                           COALESCE(n.featured_image, n.image) as display_image
+                    FROM news n 
+                    LEFT JOIN users u ON n.author_id = u.id 
+                    WHERE n.title LIKE ? AND n.is_published = 1
+                    LIMIT 1
+                ");
+            } else {
+                $stmt = $conn->prepare("
+                    SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                           n.image as display_image
+                    FROM news n 
+                    LEFT JOIN users u ON n.author_id = u.id 
+                    WHERE n.title LIKE ? AND n.is_published = 1
+                    LIMIT 1
+                ");
+            }
             $stmt->execute(['%' . $title_search . '%']);
             $news_item = $stmt->fetch(PDO::FETCH_ASSOC);
         }
     } elseif (!empty($news_id)) {
-        $stmt = $conn->prepare("
-            SELECT n.*, COALESCE(u.username, 'Unknown') as author,
-                   COALESCE(n.featured_image, n.image) as featured_image
-            FROM news n 
-            LEFT JOIN users u ON n.author_id = u.id 
-            WHERE n.id = ? AND n.is_published = 1
-        ");
+        if ($has_featured_image) {
+            $stmt = $conn->prepare("
+                SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                       COALESCE(n.featured_image, n.image) as display_image
+                FROM news n 
+                LEFT JOIN users u ON n.author_id = u.id 
+                WHERE n.id = ? AND n.is_published = 1
+            ");
+        } else {
+            $stmt = $conn->prepare("
+                SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                       n.image as display_image
+                FROM news n 
+                LEFT JOIN users u ON n.author_id = u.id 
+                WHERE n.id = ? AND n.is_published = 1
+            ");
+        }
         $stmt->execute([$news_id]);
         $news_item = $stmt->fetch(PDO::FETCH_ASSOC);
     }
@@ -164,6 +206,11 @@ try {
         }
     }
     
+    // Set featured_image for display (use display_image from query or fallback to image)
+    if (!isset($news_item['featured_image'])) {
+        $news_item['featured_image'] = $news_item['display_image'] ?? $news_item['image'] ?? '';
+    }
+    
     // Increment view count
     try {
         $view_stmt = $conn->prepare("UPDATE news SET views = views + 1 WHERE id = ?");
@@ -175,8 +222,23 @@ try {
     
 } catch (Exception $e) {
     error_log('Error fetching news: ' . $e->getMessage());
+    error_log('Stack trace: ' . $e->getTraceAsString());
+    error_log('SQL query attempted: slug=' . ($news_slug ?? '') . ', id=' . ($news_id ?? ''));
+    
+    // Show more helpful error message in development
+    $debug_mode = defined('DEBUG_MODE') && DEBUG_MODE === true;
+    if ($debug_mode) {
+        http_response_code(500);
+        die('Error loading news article: ' . htmlspecialchars($e->getMessage()) . '<br>Check error logs for details.');
+    } else {
+        http_response_code(500);
+        die('Error loading news article. Please check error logs.');
+    }
+} catch (Error $e) {
+    error_log('Fatal error fetching news: ' . $e->getMessage());
+    error_log('Stack trace: ' . $e->getTraceAsString());
     http_response_code(500);
-    die('Error loading news article. Please check error logs.');
+    die('Fatal error loading news article. Please check error logs.');
 }
 
 // Get comment count
@@ -313,9 +375,18 @@ $share_description = !empty($news_item['share_excerpt'])
     : (!empty($news_item['excerpt']) 
         ? htmlspecialchars(strip_tags($news_item['excerpt'])) 
         : htmlspecialchars(substr(strip_tags($news_item['content'] ?? ''), 0, 200)));
-$share_image = !empty($news_item['featured_image']) 
-    ? asset_path($news_item['featured_image']) 
-    : (defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/assets/images/default-news.jpg' : '');
+
+// Get share image - check multiple possible field names
+$share_image = '';
+if (!empty($news_item['featured_image'])) {
+    $share_image = asset_path($news_item['featured_image']);
+} elseif (!empty($news_item['display_image'])) {
+    $share_image = asset_path($news_item['display_image']);
+} elseif (!empty($news_item['image'])) {
+    $share_image = asset_path($news_item['image']);
+} else {
+    $share_image = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/assets/images/default-news.jpg' : '';
+}
 
 // Calculate share count (using views as proxy)
 $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% share rate
@@ -1163,7 +1234,16 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
 
                 <!-- Featured Image -->
                 <?php 
-                $featured_img = !empty($news_item['featured_image']) ? $news_item['featured_image'] : (!empty($news_item['image']) ? $news_item['image'] : '');
+                // Get featured image - check multiple possible field names
+                $featured_img = '';
+                if (!empty($news_item['featured_image'])) {
+                    $featured_img = $news_item['featured_image'];
+                } elseif (!empty($news_item['display_image'])) {
+                    $featured_img = $news_item['display_image'];
+                } elseif (!empty($news_item['image'])) {
+                    $featured_img = $news_item['image'];
+                }
+                
                 if (!empty($featured_img)): ?>
                 <div class="article-featured-image">
                     <img src="<?php echo htmlspecialchars(asset_path($featured_img)); ?>" 
