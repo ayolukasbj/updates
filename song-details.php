@@ -888,6 +888,40 @@ if (!function_exists('asset_path')) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($song['title']); ?> - <?php echo htmlspecialchars($display_artist_name ?? $song['artist']); ?> | <?php echo SITE_NAME; ?></title>
+    
+    <?php
+    // Social sharing meta tags
+    $shareSlug = createSongSlug($song['title'], $display_artist_name ?? $song['artist'] ?? 'unknown-artist');
+    $shareUrl = SITE_URL . '/song/' . urlencode($shareSlug);
+    $shareTitle = htmlspecialchars($song['title'] . ' - ' . ($display_artist_name ?? $song['artist'] ?? 'Unknown Artist'));
+    $shareDescription = !empty($song['share_excerpt']) ? htmlspecialchars($song['share_excerpt']) : (!empty($song['description']) ? htmlspecialchars(strip_tags(substr($song['description'], 0, 200))) : htmlspecialchars('Listen to ' . $song['title'] . ' by ' . ($display_artist_name ?? $song['artist'] ?? 'Unknown Artist') . ' on ' . SITE_NAME));
+    $shareImage = !empty($song['cover_art']) ? asset_path($song['cover_art']) : (defined('SITE_URL') ? SITE_URL . '/assets/images/default-cover.jpg' : '');
+    ?>
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="music.song">
+    <meta property="og:url" content="<?php echo htmlspecialchars($shareUrl); ?>">
+    <meta property="og:title" content="<?php echo $shareTitle; ?>">
+    <meta property="og:description" content="<?php echo $shareDescription; ?>">
+    <?php if (!empty($shareImage)): ?>
+    <meta property="og:image" content="<?php echo htmlspecialchars($shareImage); ?>">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <?php endif; ?>
+    <meta property="og:site_name" content="<?php echo htmlspecialchars(SITE_NAME); ?>">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="<?php echo htmlspecialchars($shareUrl); ?>">
+    <meta name="twitter:title" content="<?php echo $shareTitle; ?>">
+    <meta name="twitter:description" content="<?php echo $shareDescription; ?>">
+    <?php if (!empty($shareImage)): ?>
+    <meta name="twitter:image" content="<?php echo htmlspecialchars($shareImage); ?>">
+    <?php endif; ?>
+    
+    <!-- Additional meta tags -->
+    <meta name="description" content="<?php echo $shareDescription; ?>">
+    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- Bar UI CSS removed - not needed for our custom player -->

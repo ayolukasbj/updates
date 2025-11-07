@@ -4,6 +4,11 @@
 set_time_limit(30);
 ini_set('max_execution_time', 30);
 
+// Enable error reporting for debugging (but don't display on production)
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
 // Start output buffering only if not already started (prevents nested buffers)
 $ob_started_here = false;
 if (ob_get_level() == 0) {
@@ -11,13 +16,59 @@ if (ob_get_level() == 0) {
     $ob_started_here = true;
 }
 
-require_once 'config/config.php';
-require_once 'includes/song-storage.php';
-require_once 'includes/theme-loader.php';
+// Determine base directory (handle being called from news/ folder)
+$base_dir = dirname(__FILE__);
+if (basename($base_dir) === 'news') {
+    $base_dir = dirname($base_dir);
+}
+
+// Load config with error handling
+try {
+    $config_path = $base_dir . '/config/config.php';
+    if (!file_exists($config_path)) {
+        // Try relative path as fallback
+        $config_path = 'config/config.php';
+        if (!file_exists($config_path)) {
+            throw new Exception('Configuration file not found.');
+        }
+    }
+    require_once $config_path;
+    
+    // Ensure required files exist
+    $song_storage_path = $base_dir . '/includes/song-storage.php';
+    if (!file_exists($song_storage_path)) {
+        $song_storage_path = 'includes/song-storage.php';
+    }
+    if (file_exists($song_storage_path)) {
+        require_once $song_storage_path;
+    } else {
+        error_log('Warning: includes/song-storage.php not found');
+    }
+    
+    $theme_loader_path = $base_dir . '/includes/theme-loader.php';
+    if (!file_exists($theme_loader_path)) {
+        $theme_loader_path = 'includes/theme-loader.php';
+    }
+    if (file_exists($theme_loader_path)) {
+        require_once $theme_loader_path;
+    } else {
+        error_log('Warning: includes/theme-loader.php not found');
+    }
+} catch (Exception $e) {
+    error_log('Error loading config in news-details.php: ' . $e->getMessage());
+    http_response_code(500);
+    die('Error loading configuration. Please check error logs.');
+}
 
 // Safely include ads with error handling
 try {
-require_once 'includes/ads.php';
+    $ads_path = $base_dir . '/includes/ads.php';
+    if (!file_exists($ads_path)) {
+        $ads_path = 'includes/ads.php';
+    }
+    if (file_exists($ads_path)) {
+        require_once $ads_path;
+    }
 } catch (Exception $e) {
     error_log("Ads include error: " . $e->getMessage());
     // Define a fallback function if ads.php fails
@@ -33,9 +84,20 @@ $conn = null;
 
 // Try to get news from database first
 try {
-    require_once 'config/database.php';
+    $db_config_path = $base_dir . '/config/database.php';
+    if (!file_exists($db_config_path)) {
+        $db_config_path = 'config/database.php';
+        if (!file_exists($db_config_path)) {
+            throw new Exception('Database config file not found');
+        }
+    }
+    require_once $db_config_path;
     $db = new Database();
     $conn = $db->getConnection();
+    
+    if (!$conn) {
+        throw new Exception('Database connection failed');
+    }
     
     // Core Author System: Admin is Priority 1 (always the author displayed)
     // Handle both slug and id parameters
@@ -63,24 +125,40 @@ try {
     
     // Fallback to JSON if not found in database
     if (!$news_item && !empty($news_id)) {
-        require_once 'includes/song-storage.php';
-        $all_news = getAllNews();
-        foreach ($all_news as $news) {
-            if ($news['id'] == $news_id) {
-                $news_item = $news;
-                break;
+        $song_storage_path = $base_dir . '/includes/song-storage.php';
+        if (!file_exists($song_storage_path)) {
+            $song_storage_path = 'includes/song-storage.php';
+        }
+        if (file_exists($song_storage_path)) {
+            require_once $song_storage_path;
+        }
+        if (function_exists('getAllNews')) {
+            $all_news = getAllNews();
+            foreach ($all_news as $news) {
+                if ($news['id'] == $news_id) {
+                    $news_item = $news;
+                    break;
+                }
             }
         }
     }
 } catch (Exception $e) {
     // Fallback to JSON
-    require_once 'includes/song-storage.php';
-    $all_news = getAllNews();
-    if (!empty($news_id)) {
-        foreach ($all_news as $news) {
-            if ($news['id'] == $news_id) {
-                $news_item = $news;
-                break;
+    $song_storage_path = $base_dir . '/includes/song-storage.php';
+    if (!file_exists($song_storage_path)) {
+        $song_storage_path = 'includes/song-storage.php';
+    }
+    if (file_exists($song_storage_path)) {
+        require_once $song_storage_path;
+    }
+    if (function_exists('getAllNews')) {
+        $all_news = getAllNews();
+        if (!empty($news_id)) {
+            foreach ($all_news as $news) {
+                if ($news['id'] == $news_id) {
+                    $news_item = $news;
+                    break;
+                }
             }
         }
     }
@@ -191,6 +269,21 @@ try {
     error_log("Admin user query error: " . $e->getMessage());
 }
 
+// Ensure asset_path function exists before using it
+if (!function_exists('asset_path')) {
+    function asset_path($path) {
+        if (empty($path)) return '';
+        if (strpos($path, 'http://') === 0 || strpos($path, 'https://') === 0) {
+            return $path;
+        }
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $base_path = defined('BASE_PATH') ? BASE_PATH : '/';
+        $baseUrl = rtrim($protocol . $host . $base_path, '/');
+        return $baseUrl . '/' . ltrim($path, '/');
+    }
+}
+
 // Build current absolute URL for sharing
 $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
@@ -216,12 +309,20 @@ try {
     
     // Fallback to JSON if database fails or no results
     if (empty($related_news)) {
-        require_once 'includes/song-storage.php';
-        $all_news = getAllNews();
-        $related_news = array_filter($all_news, function($n) use ($news_item, $actual_news_id) {
-            return $n['category'] == $news_item['category'] && $n['id'] != $actual_news_id;
-        });
-        $related_news = array_slice($related_news, 0, 3);
+        $song_storage_path = $base_dir . '/includes/song-storage.php';
+        if (!file_exists($song_storage_path)) {
+            $song_storage_path = 'includes/song-storage.php';
+        }
+        if (file_exists($song_storage_path)) {
+            require_once $song_storage_path;
+        }
+        if (function_exists('getAllNews')) {
+            $all_news = getAllNews();
+            $related_news = array_filter($all_news, function($n) use ($news_item, $actual_news_id) {
+                return $n['category'] == $news_item['category'] && $n['id'] != $actual_news_id;
+            });
+            $related_news = array_slice($related_news, 0, 3);
+        }
     }
 } catch (Exception $e) {
     // Fallback to empty array
@@ -234,6 +335,45 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo htmlspecialchars($news_item['title']); ?> - <?php echo SITE_NAME; ?></title>
+    
+    <?php
+    // Social sharing meta tags
+    $newsShareUrl = $currentUrl;
+    $newsShareTitle = htmlspecialchars($news_item['title']);
+    $newsShareDescription = !empty($news_item['share_excerpt']) ? htmlspecialchars($news_item['share_excerpt']) : (!empty($news_item['excerpt']) ? htmlspecialchars(strip_tags($news_item['excerpt'])) : (!empty($news_item['content']) ? htmlspecialchars(strip_tags(substr($news_item['content'], 0, 200))) : htmlspecialchars($news_item['title'] . ' - ' . SITE_NAME));
+    $newsShareImage = !empty($news_item['featured_image']) ? asset_path($news_item['featured_image']) : (!empty($news_item['image']) ? asset_path($news_item['image']) : (defined('SITE_URL') ? SITE_URL . '/assets/images/default-news.jpg' : ''));
+    ?>
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="<?php echo htmlspecialchars($newsShareUrl); ?>">
+    <meta property="og:title" content="<?php echo $newsShareTitle; ?>">
+    <meta property="og:description" content="<?php echo $newsShareDescription; ?>">
+    <?php if (!empty($newsShareImage)): ?>
+    <meta property="og:image" content="<?php echo htmlspecialchars($newsShareImage); ?>">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <?php endif; ?>
+    <meta property="og:site_name" content="<?php echo htmlspecialchars(SITE_NAME); ?>">
+    <?php if (!empty($displayAuthorName)): ?>
+    <meta property="article:author" content="<?php echo htmlspecialchars($displayAuthorName); ?>">
+    <?php endif; ?>
+    <?php if (!empty($news_item['created_at'])): ?>
+    <meta property="article:published_time" content="<?php echo date('c', strtotime($news_item['created_at'])); ?>">
+    <?php endif; ?>
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="<?php echo htmlspecialchars($newsShareUrl); ?>">
+    <meta name="twitter:title" content="<?php echo $newsShareTitle; ?>">
+    <meta name="twitter:description" content="<?php echo $newsShareDescription; ?>">
+    <?php if (!empty($newsShareImage)): ?>
+    <meta name="twitter:image" content="<?php echo htmlspecialchars($newsShareImage); ?>">
+    <?php endif; ?>
+    
+    <!-- Additional meta tags -->
+    <meta name="description" content="<?php echo $newsShareDescription; ?>">
+    
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="assets/css/luo-style.css" rel="stylesheet">
@@ -365,7 +505,17 @@ try {
     </style>
 </head>
 <body>
-    <?php include 'includes/header.php'; ?>
+    <?php 
+    $header_path = $base_dir . '/includes/header.php';
+    if (!file_exists($header_path)) {
+        $header_path = 'includes/header.php';
+    }
+    if (file_exists($header_path)) {
+        include $header_path;
+    } else {
+        error_log('Warning: includes/header.php not found');
+    }
+    ?>
 
     <?php
     // Display header ad if exists (with error handling)
@@ -523,6 +673,23 @@ try {
 
                     <div class="author-box">
                         <?php if (!empty($displayAuthorAvatar)): ?>
+                        <?php 
+                        // Ensure asset_path function exists
+                        if (!function_exists('asset_path')) {
+                            // Define a fallback if header.php hasn't been included yet
+                            function asset_path($path) {
+                                if (empty($path)) return '';
+                                if (strpos($path, 'http://') === 0 || strpos($path, 'https://') === 0) {
+                                    return $path;
+                                }
+                                $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+                                $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                                $base_path = defined('BASE_PATH') ? BASE_PATH : '/';
+                                $baseUrl = rtrim($protocol . $host . $base_path, '/');
+                                return $baseUrl . '/' . ltrim($path, '/');
+                            }
+                        }
+                        ?>
                         <img src="<?php echo htmlspecialchars(asset_path($displayAuthorAvatar)); ?>" alt="<?php echo htmlspecialchars($displayAuthorName); ?>" class="avatar" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-right: 20px; flex-shrink: 0;">
                         <?php else: ?>
                         <span class="avatar" style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-size: 32px; margin-right: 20px; flex-shrink: 0;">
@@ -824,7 +991,17 @@ try {
         <?php endif; ?>
     </div>
 
-    <?php include 'includes/footer.php'; ?>
+    <?php 
+    $footer_path = $base_dir . '/includes/footer.php';
+    if (!file_exists($footer_path)) {
+        $footer_path = 'includes/footer.php';
+    }
+    if (file_exists($footer_path)) {
+        include $footer_path;
+    } else {
+        error_log('Warning: includes/footer.php not found');
+    }
+    ?>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" async defer></script>
     <script>
         // Mark page as loaded

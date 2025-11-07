@@ -507,8 +507,19 @@ function createAllTables($conn) {
         
         return ['success' => true, 'messages' => $success, 'errors' => []];
         
+    } catch (PDOException $e) {
+        $error_msg = 'Database error while creating tables: ' . $e->getMessage();
+        $error_msg .= ' (Error Code: ' . $e->getCode() . ')';
+        error_log('createAllTables PDOException: ' . $error_msg);
+        return ['success' => false, 'messages' => $success, 'errors' => [$error_msg]];
     } catch (Exception $e) {
-        return ['success' => false, 'messages' => $success, 'errors' => ['Error creating tables: ' . $e->getMessage()]];
+        $error_msg = 'Error creating tables: ' . $e->getMessage();
+        error_log('createAllTables Exception: ' . $error_msg . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
+        return ['success' => false, 'messages' => $success, 'errors' => [$error_msg]];
+    } catch (Error $e) {
+        $error_msg = 'Fatal error creating tables: ' . $e->getMessage();
+        error_log('createAllTables Fatal Error: ' . $error_msg . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
+        return ['success' => false, 'messages' => $success, 'errors' => [$error_msg]];
     }
 }
 
@@ -518,13 +529,38 @@ function runInstallation($db_config, $site_config, $license_data) {
     $success = [];
     
     try {
-        // Connect to database
-        $conn = new PDO(
-            "mysql:host={$db_config['db_host']};dbname={$db_config['db_name']};charset=utf8mb4",
-            $db_config['db_user'],
-            $db_config['db_pass'],
-            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-        );
+        // Validate database config
+        if (empty($db_config['db_host']) || empty($db_config['db_name']) || empty($db_config['db_user'])) {
+            throw new Exception('Invalid database configuration. Host, name, and user are required.');
+        }
+        
+        // Connect to database with error handling
+        try {
+            $conn = new PDO(
+                "mysql:host={$db_config['db_host']};dbname={$db_config['db_name']};charset=utf8mb4",
+                $db_config['db_user'],
+                $db_config['db_pass'] ?? '',
+                [
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_TIMEOUT => 10,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+                ]
+            );
+        } catch (PDOException $e) {
+            throw new Exception('Database connection failed: ' . $e->getMessage() . '. Please check your database credentials.');
+        }
+        
+        // Verify connection
+        if (!$conn) {
+            throw new Exception('Database connection returned null. Please check your database credentials.');
+        }
+        
+        // Test connection with a simple query
+        try {
+            $conn->query("SELECT 1");
+        } catch (PDOException $e) {
+            throw new Exception('Database connection test failed: ' . $e->getMessage());
+        }
         
         // Create all tables programmatically (includes settings table)
         $table_result = createAllTables($conn);
@@ -532,79 +568,144 @@ function runInstallation($db_config, $site_config, $license_data) {
             $success = array_merge($success, $table_result['messages']);
         } else {
             $errors = array_merge($errors, $table_result['errors']);
-            throw new Exception(implode(', ', $errors));
+            if (empty($errors)) {
+                $errors[] = 'Table creation failed with no error message';
+            }
+            throw new Exception('Table creation failed: ' . implode(', ', $errors));
+        }
+        
+        // Verify settings table exists
+        $checkStmt = $conn->query("SHOW TABLES LIKE 'settings'");
+        if ($checkStmt->rowCount() === 0) {
+            throw new Exception('Settings table was not created. Installation may have failed.');
         }
         
         // Insert site settings
         $settings = [
-            'site_name' => $site_config['site_name'],
+            'site_name' => $site_config['site_name'] ?? 'Music Platform',
             'site_slogan' => $site_config['site_slogan'] ?? '',
             'site_description' => $site_config['site_description'] ?? '',
-            'license_key' => $install_license_key ?? '',
-            'license_domain' => $install_domain ?? '',
+            'license_key' => $install_license_key ?? ($GLOBALS['install_license_key'] ?? ''),
+            'license_domain' => $install_domain ?? ($GLOBALS['install_domain'] ?? ''),
             'license_type' => $license_data['license']['type'] ?? 'lifetime',
             'script_version' => '1.0.0', // Initial version
             'installation_date' => date('Y-m-d H:i:s')
         ];
         
-        $stmt = $conn->prepare("
-            INSERT INTO settings (setting_key, setting_value) 
-            VALUES (?, ?) 
-            ON DUPLICATE KEY UPDATE setting_value = ?
-        ");
-        
-        foreach ($settings as $key => $value) {
-            $stmt->execute([$key, $value, $value]);
+        try {
+            $stmt = $conn->prepare("
+                INSERT INTO settings (setting_key, setting_value) 
+                VALUES (?, ?) 
+                ON DUPLICATE KEY UPDATE setting_value = ?
+            ");
+            
+            foreach ($settings as $key => $value) {
+                $stmt->execute([$key, $value, $value]);
+            }
+            
+            $success[] = "Site settings saved";
+        } catch (PDOException $e) {
+            throw new Exception('Failed to save site settings: ' . $e->getMessage());
         }
         
-        $success[] = "Site settings saved";
+        // Verify users table exists
+        $checkStmt = $conn->query("SHOW TABLES LIKE 'users'");
+        if ($checkStmt->rowCount() === 0) {
+            throw new Exception('Users table was not created. Installation may have failed.');
+        }
+        
+        // Validate admin credentials
+        if (empty($site_config['admin_username']) || empty($site_config['admin_email']) || empty($site_config['admin_password'])) {
+            throw new Exception('Admin credentials are missing. Please provide username, email, and password.');
+        }
         
         // Create admin user (users table already created by createAllTables)
         $hashed_password = password_hash($site_config['admin_password'], PASSWORD_DEFAULT);
         
-        // Check if admin user already exists
-        $checkStmt = $conn->prepare("SELECT id FROM users WHERE email = ? OR username = ?");
-        $checkStmt->execute([$site_config['admin_email'], $site_config['admin_username']]);
+        if (!$hashed_password) {
+            throw new Exception('Failed to hash admin password. Please check PHP password hashing support.');
+        }
         
-        if ($checkStmt->rowCount() == 0) {
-            // Insert admin user with all available columns
-            $adminStmt = $conn->prepare("
-                INSERT INTO users (username, email, password, first_name, last_name, full_name, role, status, is_active, email_verified)
-                VALUES (?, ?, ?, ?, ?, ?, 'super_admin', 'active', TRUE, TRUE)
-            ");
-            $adminStmt->execute([
-                $site_config['admin_username'],
-                $site_config['admin_email'],
-                $hashed_password,
-                $site_config['admin_username'],
-                '',
-                $site_config['admin_username']
-            ]);
-            $success[] = "Admin user created";
-        } else {
-            // Update existing user to super_admin
-            $updateStmt = $conn->prepare("
-                UPDATE users 
-                SET password = ?, role = 'super_admin', status = 'active', is_active = TRUE, email_verified = TRUE
-                WHERE email = ? OR username = ?
-            ");
-            $updateStmt->execute([
-                $hashed_password,
-                $site_config['admin_email'],
-                $site_config['admin_username']
-            ]);
-            $success[] = "Admin user updated";
+        // Check if admin user already exists
+        try {
+            $checkStmt = $conn->prepare("SELECT id FROM users WHERE email = ? OR username = ?");
+            $checkStmt->execute([$site_config['admin_email'], $site_config['admin_username']]);
+            
+            if ($checkStmt->rowCount() == 0) {
+                // Insert admin user with all available columns
+                $adminStmt = $conn->prepare("
+                    INSERT INTO users (username, email, password, first_name, last_name, full_name, role, status, is_active, email_verified)
+                    VALUES (?, ?, ?, ?, ?, ?, 'super_admin', 'active', TRUE, TRUE)
+                ");
+                $adminStmt->execute([
+                    $site_config['admin_username'],
+                    $site_config['admin_email'],
+                    $hashed_password,
+                    $site_config['admin_username'],
+                    '',
+                    $site_config['admin_username']
+                ]);
+                $success[] = "Admin user created";
+            } else {
+                // Update existing user to super_admin
+                $updateStmt = $conn->prepare("
+                    UPDATE users 
+                    SET password = ?, role = 'super_admin', status = 'active', is_active = TRUE, email_verified = TRUE
+                    WHERE email = ? OR username = ?
+                ");
+                $updateStmt->execute([
+                    $hashed_password,
+                    $site_config['admin_email'],
+                    $site_config['admin_username']
+                ]);
+                $success[] = "Admin user updated";
+            }
+        } catch (PDOException $e) {
+            throw new Exception('Failed to create/update admin user: ' . $e->getMessage());
         }
         
         return ['success' => true, 'errors' => [], 'success_messages' => $success];
         
     } catch (Exception $e) {
-        $errors[] = 'Installation error: ' . $e->getMessage();
+        $error_message = $e->getMessage();
+        error_log('Installation error in runInstallation: ' . $error_message);
+        $errors[] = $error_message;
+        return ['success' => false, 'errors' => $errors];
+    } catch (Error $e) {
+        $error_message = 'Fatal error: ' . $e->getMessage();
+        error_log('Installation fatal error in runInstallation: ' . $error_message . ' in ' . $e->getFile() . ' on line ' . $e->getLine());
+        $errors[] = $error_message;
         return ['success' => false, 'errors' => $errors];
     }
 }
 
 function createConfigFile($db_config, $site_config, $license_data, $license_server_url, $license_key) {
+    try {
+        // Validate inputs
+        if (empty($db_config) || empty($site_config)) {
+            throw new Exception('Invalid configuration data provided to createConfigFile');
+        }
+        
+        // Ensure config directory exists
+        $config_dir = __DIR__ . '/../config';
+        if (!is_dir($config_dir)) {
+            if (!mkdir($config_dir, 0755, true)) {
+                throw new Exception('Cannot create config directory: ' . $config_dir);
+            }
+        }
+        
+        // Check if directory is writable
+        if (!is_writable($config_dir)) {
+            throw new Exception('Config directory is not writable: ' . $config_dir . '. Please set permissions to 755 or 775.');
+        }
+        
+        $config_file = $config_dir . '/config.php';
+        
+        // Check if file already exists and is writable
+        if (file_exists($config_file) && !is_writable($config_file)) {
+            throw new Exception('Config file exists but is not writable: ' . $config_file);
+        }
+        
     $config_content = "<?php
 // config/config.php
 // Auto-generated during installation - DO NOT EDIT MANUALLY
@@ -726,7 +827,8 @@ function redirect(\$url) {
         header('Location: ' . \$url);
         exit;
     } else {
-        echo '<script>window.location.href = "' . htmlspecialchars(\$url) . '";</script>';
+        \$escaped_url = htmlspecialchars(\$url, ENT_QUOTES, 'UTF-8');
+        echo \"<script>window.location.href = \" . json_encode(\$escaped_url) . \";</script>\";
         exit;
     }
 }
@@ -744,6 +846,34 @@ function base_url(\$path = '') {
 }
 ";
 
-    file_put_contents(__DIR__ . '/../config/config.php', $config_content);
+        // Write config file with error handling
+        $config_file_path = $config_dir . '/config.php';
+        $result = @file_put_contents($config_file_path, $config_content, LOCK_EX);
+        
+        if ($result === false) {
+            $error = error_get_last();
+            $error_msg = $error ? $error['message'] : 'Unknown error';
+            throw new Exception('Failed to write config file: ' . $error_msg . '. File path: ' . $config_file_path);
+        }
+        
+        // Verify file was created and is readable
+        if (!file_exists($config_file_path)) {
+            throw new Exception('Config file was not created. Please check file permissions.');
+        }
+        
+        if (!is_readable($config_file_path)) {
+            throw new Exception('Config file was created but is not readable. Please check file permissions.');
+        }
+        
+        // Verify the file contains valid PHP (basic check)
+        $file_content = file_get_contents($config_file_path);
+        if (strpos($file_content, '<?php') === false) {
+            throw new Exception('Config file was created but does not contain valid PHP code.');
+        }
+        
+    } catch (Exception $e) {
+        error_log('Error in createConfigFile: ' . $e->getMessage());
+        throw $e; // Re-throw to be caught by caller
+    }
 }
 

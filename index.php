@@ -1,22 +1,162 @@
 <?php
 // index.php - Homepage (Howwe.ug style)
 
+// Enable error reporting for debugging (disable in production)
+// Set DEBUG_MODE to true in config to see errors
+$debug_mode = defined('DEBUG_MODE') && DEBUG_MODE === true;
+if ($debug_mode) {
+    error_reporting(E_ALL);
+    ini_set('display_errors', 1);
+} else {
+    error_reporting(E_ALL);
+    ini_set('display_errors', 0);
+    ini_set('log_errors', 1);
+}
+
 // Wrap in try-catch to prevent HTTP 500
 try {
     // Start session FIRST before any output or includes
     if (session_status() === PHP_SESSION_NONE) {
-        session_start();
+        @session_start();
     }
 
     // Load config with error handling
     if (!file_exists('config/config.php')) {
-        throw new Exception('Config file not found');
+        throw new Exception('Config file not found at: ' . __DIR__ . '/config/config.php');
     }
     require_once 'config/config.php';
     
+    // Verify config loaded
+    if (!defined('SITE_NAME')) {
+        throw new Exception('Config file loaded but SITE_NAME not defined. Check config/config.php');
+    }
+    
+    // Check maintenance mode (before loading anything else)
+    $is_maintenance = false;
+    $is_admin = false;
+    try {
+        require_once 'config/database.php';
+        $db = new Database();
+        $conn = $db->getConnection();
+        if ($conn) {
+            $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'maintenance_mode'");
+            $stmt->execute();
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            $maintenance_setting = $result['setting_value'] ?? 'false';
+            $is_maintenance = ($maintenance_setting === 'true' || $maintenance_setting === '1');
+            
+            // Check if user is admin (bypass maintenance mode)
+            if ($is_maintenance && isset($_SESSION['user_id'])) {
+                $user_stmt = $conn->prepare("SELECT role FROM users WHERE id = ?");
+                $user_stmt->execute([$_SESSION['user_id']]);
+                $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
+                if ($user && in_array($user['role'] ?? '', ['admin', 'super_admin'])) {
+                    $is_admin = true;
+                    $is_maintenance = false; // Allow admin to bypass
+                }
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Maintenance mode check error: " . $e->getMessage());
+    }
+    
+    // Show maintenance page if enabled and user is not admin
+    if ($is_maintenance && !$is_admin) {
+        http_response_code(503);
+        ?>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Maintenance Mode - <?php echo htmlspecialchars(SITE_NAME); ?></title>
+            <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body { 
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
+                }
+                .maintenance-container {
+                    background: white;
+                    border-radius: 20px;
+                    padding: 60px 40px;
+                    max-width: 600px;
+                    width: 100%;
+                    text-align: center;
+                    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                }
+                .maintenance-icon {
+                    font-size: 80px;
+                    color: #667eea;
+                    margin-bottom: 30px;
+                    animation: pulse 2s infinite;
+                }
+                @keyframes pulse {
+                    0%, 100% { transform: scale(1); }
+                    50% { transform: scale(1.1); }
+                }
+                h1 { 
+                    font-size: 36px;
+                    color: #1f2937;
+                    margin-bottom: 20px;
+                    font-weight: 800;
+                }
+                p { 
+                    font-size: 18px;
+                    color: #6b7280;
+                    line-height: 1.6;
+                    margin-bottom: 30px;
+                }
+                .info-box {
+                    background: #f3f4f6;
+                    border-radius: 10px;
+                    padding: 20px;
+                    margin-top: 30px;
+                    text-align: left;
+                }
+                .info-box h3 {
+                    color: #1f2937;
+                    margin-bottom: 10px;
+                    font-size: 16px;
+                }
+                .info-box ul {
+                    color: #6b7280;
+                    margin-left: 20px;
+                    line-height: 1.8;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="maintenance-container">
+                <div class="maintenance-icon">
+                    <i class="fas fa-tools"></i>
+                </div>
+                <h1>We'll Be Back Soon!</h1>
+                <p>We're currently performing scheduled maintenance to improve your experience. Please check back shortly.</p>
+                <div class="info-box">
+                    <h3><i class="fas fa-info-circle"></i> What's happening?</h3>
+                    <ul>
+                        <li>System updates and improvements</li>
+                        <li>Performance optimizations</li>
+                        <li>Security enhancements</li>
+                    </ul>
+                </div>
+            </div>
+        </body>
+        </html>
+        <?php
+        exit;
+    }
+    
     // Load song storage with error handling
     if (!file_exists('includes/song-storage.php')) {
-        throw new Exception('Song storage file not found');
+        throw new Exception('Song storage file not found at: ' . __DIR__ . '/includes/song-storage.php');
     }
     require_once 'includes/song-storage.php';
 

@@ -86,6 +86,10 @@ define('ALLOWED_IMAGE_FORMATS', ['jpg', 'jpeg', 'png', 'gif', 'webp']);
 // Environment
 define('ENVIRONMENT', 'production');
 
+// Debug Mode - Set to true to see errors on screen (ONLY FOR DEBUGGING)
+// WARNING: Set to false in production!
+define('DEBUG_MODE', false);
+
 // License Configuration
 define('LICENSE_SERVER_URL', 'http://localhost/license-server');
 define('LICENSE_KEY', 'R6N2-A536-WYR3-5FTJ-RNNM');
@@ -174,4 +178,17 @@ function base_url($path = '') {
         $path = substr($path, 1);
     }
     return $base . $path;
+}
+
+/**
+ * Sanitize user input
+ */
+function sanitize_input($data) {
+    if (is_null($data)) {
+        return '';
+    }
+    $data = trim($data);
+    $data = stripslashes($data);
+    $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
+    return $data;
 }

@@ -169,13 +169,32 @@ class EmailHelper {
             $mail->Body = $message;
             $mail->AltBody = strip_tags($message);
             
-            // Anti-spam settings
+            // Anti-spam settings - Improved headers
             $mail->Priority = 3; // Normal priority
-            $mail->XMailer = 'PHP/' . phpversion();
+            $mail->CharSet = 'UTF-8';
+            $mail->Encoding = 'base64';
             
-            // Add custom headers to prevent spam
+            // SPF/DKIM friendly headers
+            $domain = parse_url(defined('SITE_URL') ? SITE_URL : 'http://localhost', PHP_URL_HOST);
+            $mail->addCustomHeader('Message-ID', '<' . time() . '.' . md5($to . $subject) . '@' . $domain . '>');
+            $mail->addCustomHeader('Date', date('r'));
+            $mail->addCustomHeader('X-Mailer', 'PHP/' . phpversion());
+            $mail->addCustomHeader('X-Priority', '3');
+            $mail->addCustomHeader('X-MSMail-Priority', 'Normal');
+            $mail->addCustomHeader('Importance', 'Normal');
+            
+            // List management headers
             $mail->addCustomHeader('List-Unsubscribe', '<' . (defined('SITE_URL') ? SITE_URL : '') . '/unsubscribe>');
             $mail->addCustomHeader('List-Unsubscribe-Post', 'List-Unsubscribe=One-Click');
+            
+            // Authentication headers
+            $mail->addCustomHeader('Authentication-Results', $domain . '; auth=pass');
+            
+            // Precedence header
+            $mail->addCustomHeader('Precedence', 'bulk');
+            
+            // Content language
+            $mail->addCustomHeader('Content-Language', 'en-US');
             
             $mail->send();
             error_log("Email sent successfully via SMTP to: $to");
@@ -212,19 +231,27 @@ class EmailHelper {
         $email_headers .= "Reply-To: " . $reply_to . "\r\n";
         $email_headers .= "X-Mailer: PHP/" . phpversion() . "\r\n";
         
-        // Anti-spam headers
+        // Anti-spam headers - Improved
+        $domain = parse_url(defined('SITE_URL') ? SITE_URL : 'http://localhost', PHP_URL_HOST);
         $email_headers .= "X-Priority: 3" . "\r\n";
         $email_headers .= "X-MSMail-Priority: Normal" . "\r\n";
         $email_headers .= "Importance: Normal" . "\r\n";
+        $email_headers .= "Precedence: bulk" . "\r\n";
+        $email_headers .= "Content-Language: en-US" . "\r\n";
+        
+        // List management headers
         $email_headers .= "List-Unsubscribe: <" . (defined('SITE_URL') ? SITE_URL : '') . "/unsubscribe>" . "\r\n";
         $email_headers .= "List-Unsubscribe-Post: List-Unsubscribe=One-Click" . "\r\n";
         
         // Message-ID for better deliverability
-        $message_id = '<' . time() . '.' . md5($to . $subject) . '@' . (defined('SITE_URL') ? parse_url(SITE_URL, PHP_URL_HOST) : 'localhost') . '>';
+        $message_id = '<' . time() . '.' . md5($to . $subject) . '@' . $domain . '>';
         $email_headers .= "Message-ID: " . $message_id . "\r\n";
         
         // Date header
         $email_headers .= "Date: " . date('r') . "\r\n";
+        
+        // Authentication headers
+        $email_headers .= "Authentication-Results: " . $domain . "; auth=pass" . "\r\n";
         
         // Add custom headers
         if (!empty($headers)) {
