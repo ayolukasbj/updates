@@ -111,15 +111,43 @@ try {
     // Core Author System: Admin is Priority 1 (always the author displayed)
     // Handle both slug and id parameters
     if (!empty($news_slug)) {
-        // Get by slug
-        $stmt = $conn->prepare("
-            SELECT n.*, COALESCE(u.username, 'Unknown') as author 
-            FROM news n 
-            LEFT JOIN users u ON n.author_id = u.id 
-            WHERE n.slug = ? AND n.is_published = 1
-        ");
-        $stmt->execute([$news_slug]);
-        $news_item = $stmt->fetch(PDO::FETCH_ASSOC);
+        // Get by slug - try exact match first, then try URL-decoded version
+        $slug_variations = [
+            $news_slug,
+            urldecode($news_slug),
+            str_replace('-', ' ', $news_slug),
+            str_replace('-', '_', $news_slug)
+        ];
+        
+        foreach ($slug_variations as $slug_to_try) {
+            $stmt = $conn->prepare("
+                SELECT n.*, COALESCE(u.username, 'Unknown') as author 
+                FROM news n 
+                LEFT JOIN users u ON n.author_id = u.id 
+                WHERE (n.slug = ? OR n.slug LIKE ?) AND n.is_published = 1
+                LIMIT 1
+            ");
+            $stmt->execute([$slug_to_try, '%' . $slug_to_try . '%']);
+            $news_item = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($news_item) {
+                break; // Found it, stop trying
+            }
+        }
+        
+        // If still not found, try searching by title
+        if (!$news_item) {
+            $title_search = str_replace('-', ' ', $news_slug);
+            $stmt = $conn->prepare("
+                SELECT n.*, COALESCE(u.username, 'Unknown') as author 
+                FROM news n 
+                LEFT JOIN users u ON n.author_id = u.id 
+                WHERE n.title LIKE ? AND n.is_published = 1
+                LIMIT 1
+            ");
+            $stmt->execute(['%' . $title_search . '%']);
+            $news_item = $stmt->fetch(PDO::FETCH_ASSOC);
+        }
     } elseif (!empty($news_id)) {
         // Get by id
         $stmt = $conn->prepare("
@@ -174,8 +202,18 @@ try {
 }
 
 if (!$news_item) {
-    header('Location: news.php');
-    exit;
+    // Log the error for debugging
+    error_log("News item not found. Slug: " . ($news_slug ?? 'empty') . ", ID: " . ($news_id ?? 'empty'));
+    
+    // Try to redirect to news listing page
+    $news_url = defined('SITE_URL') ? SITE_URL . '/news.php' : '/news.php';
+    if (!headers_sent()) {
+        header('Location: ' . $news_url);
+        exit;
+    } else {
+        echo '<script>window.location.href = "' . htmlspecialchars($news_url) . '";</script>';
+        exit;
+    }
 }
 
 // Get the news ID for related news query

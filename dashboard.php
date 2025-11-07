@@ -36,11 +36,30 @@ if (!function_exists('is_logged_in') || !is_logged_in()) {
     }
 }
 
-$user_id = get_user_id();
+$user_id = function_exists('get_user_id') ? get_user_id() : ($_SESSION['user_id'] ?? null);
+
+if (!$user_id) {
+    if (function_exists('redirect')) {
+        redirect('login.php');
+    } else {
+        header('Location: login.php');
+        exit;
+    }
+}
 
 // Get user data from database
-$db = new Database();
-$conn = $db->getConnection();
+try {
+    $db = new Database();
+    $conn = $db->getConnection();
+    
+    if (!$conn) {
+        throw new Exception('Database connection failed');
+    }
+} catch (Exception $e) {
+    error_log('Error connecting to database in dashboard.php: ' . $e->getMessage());
+    http_response_code(500);
+    die('Error connecting to database. Please check error logs.');
+}
 
 // Check user role and redirect accordingly
 $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
