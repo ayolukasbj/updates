@@ -8,7 +8,7 @@ require_once '../config/config.php';
 $page_title = 'Test Update Connection';
 
 // Get current version
-$current_version = '1.0.0';
+$current_version = '1.0';
 try {
     $db = new Database();
     $conn = $db->getConnection();
@@ -19,7 +19,7 @@ try {
         $current_version = $result['setting_value'];
     }
 } catch (Exception $e) {
-    $current_version = defined('SCRIPT_VERSION') ? SCRIPT_VERSION : '1.0.0';
+    $current_version = defined('SCRIPT_VERSION') ? SCRIPT_VERSION : '1.0';
 }
 
 // Get license server URL

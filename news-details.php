@@ -1248,40 +1248,28 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
 
                 <!-- Featured Image -->
                 <?php 
-                // Get featured image - check multiple possible field names
-                // Priority: display_image (from COALESCE query) > featured_image > image
+                // Get featured image - match homepage logic exactly
+                // Homepage uses: $carousel_news['image'] directly without asset_path()
+                // Check featured_image first (if column exists), then fallback to image
                 $featured_img = '';
-                if (!empty($news_item['display_image'])) {
-                    $featured_img = $news_item['display_image'];
-                } elseif (!empty($news_item['featured_image'])) {
+                if (!empty($news_item['featured_image'])) {
                     $featured_img = $news_item['featured_image'];
                 } elseif (!empty($news_item['image'])) {
                     $featured_img = $news_item['image'];
-                }
-                
-                // Clean up the image path
-                if (!empty($featured_img)) {
-                    $featured_img = trim($featured_img);
-                    // Remove any leading slashes or dots
-                    $featured_img = ltrim($featured_img, './');
+                } elseif (!empty($news_item['display_image'])) {
+                    $featured_img = $news_item['display_image'];
                 }
                 
                 if (!empty($featured_img)): 
-                    $img_url = asset_path($featured_img);
-                    // Debug: log the image URL
-                    error_log('News details image URL: ' . $img_url . ' (from field: ' . ($news_item['display_image'] ? 'display_image' : ($news_item['featured_image'] ? 'featured_image' : 'image')) . ')');
+                    // Use image directly like homepage does, without asset_path()
+                    $img_url = htmlspecialchars($featured_img);
                 ?>
                 <div class="article-featured-image">
-                    <img src="<?php echo htmlspecialchars($img_url); ?>" 
+                    <img src="<?php echo $img_url; ?>" 
                          alt="<?php echo htmlspecialchars($news_item['title']); ?>"
                          style="max-width: 100%; height: auto; display: block;"
-                         onerror="console.error('Image failed to load: <?php echo htmlspecialchars($img_url); ?>'); this.style.display='none';">
+                         onerror="console.error('Image failed to load: <?php echo $img_url; ?>'); this.style.display='none';">
                 </div>
-                <?php else: ?>
-                <!-- Debug: No image found -->
-                <!-- display_image: <?php echo htmlspecialchars($news_item['display_image'] ?? 'empty'); ?> -->
-                <!-- featured_image: <?php echo htmlspecialchars($news_item['featured_image'] ?? 'empty'); ?> -->
-                <!-- image: <?php echo htmlspecialchars($news_item['image'] ?? 'empty'); ?> -->
                 <?php endif; ?>
 
                 <!-- Article Body -->
