@@ -201,26 +201,13 @@ $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https:
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 
 // Fix: Always use root base path for header links
-// When accessed via /news/{slug}, BASE_PATH might be incorrectly calculated
-// So we always force it to root for the header
-$base_path = '/';
+// When accessed via /news/{slug}, the base tag must point to root, not /news/
+$request_uri = $_SERVER['REQUEST_URI'] ?? '';
+$script_name = $_SERVER['SCRIPT_NAME'] ?? '';
 
-// Get SITE_URL if defined, otherwise construct it
-if (defined('SITE_URL')) {
-    // Extract base path from SITE_URL
-    $site_url_parsed = parse_url(SITE_URL);
-    $base_path = isset($site_url_parsed['path']) ? rtrim($site_url_parsed['path'], '/') . '/' : '/';
-    // Ensure it's always root
-    if ($base_path !== '/') {
-        // Check if it contains /news/ - if so, remove it
-        $base_path = str_replace('/news/', '/', $base_path);
-        // If still not root and not empty, try to get actual root
-        if ($base_path !== '/') {
-            // Extract just the domain base
-            $base_path = '/';
-        }
-    }
-}
+// Always force base path to root for header
+// This ensures relative links like href="songs.php" resolve to /songs.php, not /news/songs.php
+$base_path = '/';
 
 $currentBaseUrl = $protocol . $host . $base_path;
 
@@ -792,7 +779,7 @@ if (function_exists('renderThemeStyles')) {
             <i class="fas fa-bars"></i>
         </button>
         
-        <a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/index.php" class="logo">
+        <a href="index.php" class="logo">
             <?php 
             if (!empty($site_logo)): 
                 // Convert Windows backslashes to forward slashes first
@@ -839,23 +826,23 @@ if (function_exists('renderThemeStyles')) {
 
         <nav>
             <ul class="nav-menu" id="navMenu">
-                <li><a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/index.php"><i class="fas fa-home"></i> Home</a></li>
-                <li><a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/songs.php"><i class="fas fa-music"></i> Latest Music</a></li>
-                <li><a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/news.php"><i class="fas fa-newspaper"></i> News</a></li>
-                <li><a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/artists.php"><i class="fas fa-users"></i> Artists</a></li>
-                <li><a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/top-100.php"><i class="fas fa-trophy"></i> 100</a></li>
-                <li><a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/polls.php"><i class="fas fa-poll"></i> Opinion poll</a></li>
-                <li><a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/about.php"><i class="fas fa-info-circle"></i> About</a></li>
+                <li><a href="index.php"><i class="fas fa-home"></i> Home</a></li>
+                <li><a href="songs.php"><i class="fas fa-music"></i> Latest Music</a></li>
+                <li><a href="news.php"><i class="fas fa-newspaper"></i> News</a></li>
+                <li><a href="artists.php"><i class="fas fa-users"></i> Artists</a></li>
+                <li><a href="top-100.php"><i class="fas fa-trophy"></i> 100</a></li>
+                <li><a href="polls.php"><i class="fas fa-poll"></i> Opinion poll</a></li>
+                <li><a href="about.php"><i class="fas fa-info-circle"></i> About</a></li>
             </ul>
         </nav>
 
         <div class="user-menu">
             <?php if ($isLoggedIn): ?>
-                <a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/artist-profile-mobile.php" class="user-icon" title="Artist Profile" style="background: rgba(255, 255, 255, 0.1); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                <a href="artist-profile-mobile.php" class="user-icon" title="Artist Profile" style="background: rgba(255, 255, 255, 0.1); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
                     <i class="fas fa-user"></i>
                 </a>
             <?php else: ?>
-                <a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/login.php" class="user-icon" title="Login" style="background: rgba(255, 255, 255, 0.1); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                <a href="login.php" class="user-icon" title="Login" style="background: rgba(255, 255, 255, 0.1); width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
                     <i class="fas fa-user"></i>
                 </a>
             <?php endif; ?>
@@ -868,17 +855,17 @@ if (function_exists('renderThemeStyles')) {
     <div class="secondary-nav-container">
         <ul class="secondary-nav-menu">
             <li>
-                <a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/index.php" class="secondary-nav-link" data-item="home">HOME</a>
+                <a href="index.php" class="secondary-nav-link" data-item="home">HOME</a>
                 <div class="nav-highlight" id="navHighlight"></div>
             </li>
             <li>
-                <a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/songs.php" class="secondary-nav-link" data-item="music">MUSIC</a>
+                <a href="songs.php" class="secondary-nav-link" data-item="music">MUSIC</a>
             </li>
             <li>
-                <a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/artists.php" class="secondary-nav-link" data-item="artist">ARTIST</a>
+                <a href="artists.php" class="secondary-nav-link" data-item="artist">ARTIST</a>
             </li>
             <li>
-                <a href="<?php echo defined('SITE_URL') ? rtrim(SITE_URL, '/') : ''; ?>/news.php" class="secondary-nav-link" data-item="news">NEWS</a>
+                <a href="news.php" class="secondary-nav-link" data-item="news">NEWS</a>
             </li>
         </ul>
     </div>
