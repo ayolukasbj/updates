@@ -13,8 +13,10 @@ if ($debug_mode) {
     ini_set('log_errors', 1);
 }
 
-// Start output buffering to catch any errors
-ob_start();
+// Start output buffering only if not already started
+if (ob_get_level() == 0) {
+    ob_start();
+}
 
 // Start session first
 if (session_status() === PHP_SESSION_NONE) {
@@ -38,14 +40,15 @@ try {
     die('Error: ' . htmlspecialchars($e->getMessage()));
 }
 
-// Redirect if already logged in
-if (function_exists('is_logged_in') && is_logged_in()) {
-    if (function_exists('redirect') && defined('SITE_URL')) {
-        redirect(SITE_URL . '/dashboard.php');
-    } else {
-        header('Location: dashboard.php');
-        exit;
+// Redirect if already logged in (but not if POST request - allow login processing)
+if ($_SERVER['REQUEST_METHOD'] !== 'POST' && function_exists('is_logged_in') && is_logged_in()) {
+    // Clear output buffer before redirect
+    if (ob_get_level() > 0) {
+        ob_end_clean();
     }
+    $redirect_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/dashboard.php' : '/dashboard.php';
+    header('Location: ' . $redirect_url, true, 302);
+    exit;
 }
 
 // Load AuthController with error handling
@@ -57,11 +60,22 @@ try {
     
     $auth = new AuthController();
     $auth->login();
+    
+    // If we reach here (no redirect happened), flush output buffer to display login form
+    if (ob_get_level() > 0) {
+        ob_end_flush();
+    }
 } catch (Exception $e) {
-    ob_end_clean();
+    if (ob_get_level() > 0) {
+        ob_end_clean();
+    }
     http_response_code(500);
     die('Error loading authentication: ' . htmlspecialchars($e->getMessage()));
+} catch (Error $e) {
+    if (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    http_response_code(500);
+    die('Fatal error: ' . htmlspecialchars($e->getMessage()));
 }
-
-ob_end_flush();
 ?>

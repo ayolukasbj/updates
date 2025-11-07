@@ -112,33 +112,23 @@ class AuthController {
                     $_SESSION['error_message'] = 'Please verify your email before logging in.';
                 } else {
                     $_SESSION['success_message'] = 'Welcome back!';
-                    // Redirect to dashboard or homepage - use relative URL to avoid issues
-                    $redirect_url = 'dashboard.php';
                     
-                    // Try redirect function first
-                    if (function_exists('redirect')) {
-                        try {
-                            redirect($redirect_url);
-                        } catch (Exception $e) {
-                            error_log('Redirect function error: ' . $e->getMessage());
-                            // Fallback to header redirect
-                            if (!headers_sent()) {
-                                header('Location: ' . $redirect_url);
-                                exit;
-                            } else {
-                                echo '<script>window.location.href = "' . htmlspecialchars($redirect_url) . '";</script>';
-                                exit;
-                            }
-                        }
+                    // Clear any output buffers
+                    if (ob_get_level() > 0) {
+                        ob_end_clean();
+                    }
+                    
+                    // Redirect to dashboard - use absolute URL for reliability
+                    $redirect_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/dashboard.php' : '/dashboard.php';
+                    
+                    // Simple header redirect - most reliable
+                    if (!headers_sent()) {
+                        header('Location: ' . $redirect_url, true, 302);
+                        exit;
                     } else {
-                        // Use header redirect
-                        if (!headers_sent()) {
-                            header('Location: ' . $redirect_url);
-                            exit;
-                        } else {
-                            echo '<script>window.location.href = "' . htmlspecialchars($redirect_url) . '";</script>';
-                            exit;
-                        }
+                        // Headers already sent - use JavaScript
+                        echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><script>window.location.href = "' . htmlspecialchars($redirect_url) . '";</script></head><body>Redirecting...</body></html>';
+                        exit;
                     }
                 }
                 } else {

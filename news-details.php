@@ -18,41 +18,86 @@ ini_set('log_errors', 1);
 set_time_limit(30);
 ini_set('max_execution_time', 30);
 
-// Find base directory
+// Find base directory - handle being called from news/ folder or root
 $base_dir = __DIR__;
+$config_path = null;
+
+// If called from news/ folder
 if (defined('CALLED_FROM_NEWS_FOLDER')) {
     $base_dir = dirname($base_dir);
 }
 
-// Load configuration
-$config_loaded = false;
-$config_path = $base_dir . '/config/config.php';
-if (!file_exists($config_path)) {
-    $config_path = 'config/config.php';
+// Try multiple paths for config file
+$possible_config_paths = [
+    $base_dir . '/config/config.php',  // Standard path
+    dirname(__DIR__) . '/config/config.php',  // If called from subdirectory
+    __DIR__ . '/config/config.php',  // If in root
+    'config/config.php',  // Relative path
+    $_SERVER['DOCUMENT_ROOT'] . '/config/config.php',  // Absolute from document root
+];
+
+foreach ($possible_config_paths as $path) {
+    if (file_exists($path)) {
+        $config_path = $path;
+        $base_dir = dirname(dirname($path));  // Update base_dir based on found config
+        break;
+    }
 }
-if (file_exists($config_path)) {
+
+// Load configuration
+if ($config_path && file_exists($config_path)) {
     require_once $config_path;
-    $config_loaded = true;
 } else {
-    error_log('ERROR: config/config.php not found');
-    http_response_code(500);
-    die('Configuration file not found.');
+    // Last attempt: check common locations
+    $common_paths = [
+        dirname(dirname(__FILE__)) . '/config/config.php',
+        realpath(dirname(__FILE__) . '/../config/config.php'),
+    ];
+    
+    $found = false;
+    foreach ($common_paths as $path) {
+        if ($path && file_exists($path)) {
+            require_once $path;
+            $base_dir = dirname(dirname($path));
+            $found = true;
+            break;
+        }
+    }
+    
+    if (!$found) {
+        error_log('ERROR: config/config.php not found. Tried: ' . implode(', ', $possible_config_paths));
+        http_response_code(500);
+        die('Configuration file not found. Please check that config/config.php exists.');
+    }
 }
 
 // Load database
 $db = null;
 $conn = null;
 try {
-    $db_path = $base_dir . '/config/database.php';
-    if (!file_exists($db_path)) {
-        $db_path = 'config/database.php';
+    // Try multiple paths for database config
+    $possible_db_paths = [
+        $base_dir . '/config/database.php',
+        dirname($config_path) . '/database.php',
+        __DIR__ . '/config/database.php',
+        'config/database.php',
+        $_SERVER['DOCUMENT_ROOT'] . '/config/database.php',
+    ];
+    
+    $db_path = null;
+    foreach ($possible_db_paths as $path) {
+        if (file_exists($path)) {
+            $db_path = $path;
+            break;
+        }
     }
-    if (file_exists($db_path)) {
+    
+    if ($db_path && file_exists($db_path)) {
         require_once $db_path;
         $db = new Database();
         $conn = $db->getConnection();
     } else {
-        throw new Exception('Database config not found');
+        throw new Exception('Database config not found. Tried: ' . implode(', ', $possible_db_paths));
     }
 } catch (Exception $e) {
     error_log('Database error: ' . $e->getMessage());
