@@ -19,12 +19,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $site_tagline = trim($_POST['site_tagline'] ?? '');
                 $show_site_name = isset($_POST['show_site_name']) ? '1' : '0';
                 $maintenance_mode = isset($_POST['maintenance_mode']) ? 1 : 0;
+                $disable_copy = isset($_POST['disable_copy']) ? 1 : 0;
                 
                 // Save settings
                 saveSetting('site_name', $site_name);
                 saveSetting('site_tagline', $site_tagline);
                 saveSetting('show_site_name', $show_site_name);
                 saveSetting('maintenance_mode', $maintenance_mode);
+                saveSetting('disable_copy', $disable_copy);
                 
                 // Update config.php
                 updateConfigFile('SITE_NAME', $site_name);
@@ -208,6 +210,7 @@ $current_settings = [
     'site_tagline' => getSetting('site_tagline', 'Your Music Platform'),
     'show_site_name' => getSetting('show_site_name', 1),
     'maintenance_mode' => getSetting('maintenance_mode', 0),
+    'disable_copy' => getSetting('disable_copy', 1), // Default to enabled
     'site_logo' => getSetting('site_logo', ''),
     'site_favicon' => getSetting('site_favicon', ''),
     'default_artist_cover' => getSetting('default_artist_cover', ''),
@@ -418,6 +421,27 @@ include 'includes/header.php';
                                <?php echo $current_settings['maintenance_mode'] ? 'checked' : ''; ?>>
                         <span class="slider round"></span>
                     </label>
+                </div>
+                
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">Disable Copy/Right Click Protection</div>
+                        <div class="setting-description">
+                            When enabled, prevents users from right-clicking, copying text, selecting content, and accessing developer tools.
+                            <br><small style="color: #ef4444;">Note: This provides basic protection but determined users can bypass it. It's not 100% secure.</small>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="switch">
+                            <input type="checkbox" name="disable_copy" 
+                                   <?php echo ($current_settings['disable_copy'] == 1) ? 'checked' : ''; ?>>
+                            <span class="slider round"></span>
+                        </label>
+                        <div style="margin-top: 10px; font-size: 13px; color: #6b7280;">
+                            <i class="fas fa-info-circle"></i> 
+                            Current status: <strong><?php echo ($current_settings['disable_copy'] == 1) ? 'Enabled' : 'Disabled'; ?></strong>
+                        </div>
+                    </div>
                 </div>
                 
                 <button type="submit" class="btn btn-primary">

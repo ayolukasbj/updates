@@ -12,7 +12,7 @@ $update_info = null;
 $error = '';
 
 // Get current version (from config or database)
-$current_version = '1.0.0';
+$current_version = '1.0';
 
 try {
     // Try to get from database settings
@@ -27,7 +27,7 @@ try {
 } catch (Exception $e) {
     // Fallback to constant
     require_once '../config/version.php';
-    $current_version = defined('SCRIPT_VERSION') ? SCRIPT_VERSION : '1.0.0';
+    $current_version = defined('SCRIPT_VERSION') ? SCRIPT_VERSION : '1.0';
 }
 
 // Check for updates
@@ -42,8 +42,12 @@ if (strpos($license_server_url, 'localhost') !== false || strpos($license_server
 
 $updates_api_url = rtrim($license_server_url, '/') . '/api/updates.php';
 
+// Allow updates even with same version (force check for file changes)
+// Add force_check parameter to allow server to return updates even if version matches
+$force_check = isset($_GET['force']) ? '1' : '0';
+
 try {
-    $ch = curl_init($updates_api_url . '?version=' . urlencode($current_version));
+    $ch = curl_init($updates_api_url . '?version=' . urlencode($current_version) . '&force_check=' . $force_check);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 15);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
@@ -75,6 +79,10 @@ try {
             $update_info = $result['latest_update'];
         } elseif ($result && isset($result['error'])) {
             $error = 'Update server error: ' . htmlspecialchars($result['error']);
+        } elseif ($result && isset($result['has_update']) && $result['has_update'] === false && isset($result['force_update']) && $result['force_update'] === true) {
+            // Server indicates update available even with same version (file changes detected)
+            $update_available = true;
+            $update_info = $result['latest_update'];
         }
     } elseif ($http_code === 404) {
         $error = 'Update API endpoint not found (404). Please verify the API exists at: ' . htmlspecialchars($updates_api_url) .
@@ -106,9 +114,17 @@ include 'includes/header.php';
         <h2>Current Version</h2>
     </div>
     <div class="card-body">
-        <p style="font-size: 18px; margin: 0;">
+        <p style="font-size: 18px; margin: 0; margin-bottom: 15px;">
             <strong>Installed Version:</strong> 
             <span style="color: #3b82f6; font-weight: 600;"><?php echo htmlspecialchars($current_version); ?></span>
+        </p>
+        <p style="margin: 0;">
+            <a href="?force=1" class="btn btn-secondary" style="padding: 8px 16px; font-size: 14px;">
+                <i class="fas fa-sync"></i> Force Check for Updates (Even if version matches)
+            </a>
+            <small style="display: block; margin-top: 8px; color: #6b7280;">
+                Force check allows updates even if version is the same, useful when files have been modified.
+            </small>
         </p>
     </div>
 </div>
