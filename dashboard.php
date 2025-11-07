@@ -1,54 +1,33 @@
 <?php
-// Enable error reporting for debugging (but don't display)
+/**
+ * User Dashboard
+ * Main dashboard page for logged-in users
+ */
+
+// Start session
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+// Error handling
 error_reporting(E_ALL);
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 
-// Start session first
-if (session_status() === PHP_SESSION_NONE) {
-    @session_start();
+// Load configuration
+if (!file_exists('config/config.php')) {
+    error_log('ERROR: config/config.php not found in dashboard.php');
+    http_response_code(500);
+    die('Configuration file not found.');
 }
+require_once 'config/config.php';
 
-// Load config with error handling
+// Load database
 try {
-    if (!file_exists('config/config.php')) {
-        throw new Exception('Configuration file not found.');
-    }
-    require_once 'config/config.php';
-    
     if (!file_exists('config/database.php')) {
-        throw new Exception('Database configuration file not found.');
+        throw new Exception('Database config not found');
     }
     require_once 'config/database.php';
-} catch (Exception $e) {
-    error_log('Error loading config in dashboard.php: ' . $e->getMessage());
-    http_response_code(500);
-    die('Error loading configuration. Please check error logs.');
-}
-
-// Redirect if not logged in
-if (!function_exists('is_logged_in') || !is_logged_in()) {
-    if (function_exists('redirect')) {
-        redirect('login.php');
-    } else {
-        header('Location: login.php');
-        exit;
-    }
-}
-
-$user_id = function_exists('get_user_id') ? get_user_id() : ($_SESSION['user_id'] ?? null);
-
-if (!$user_id) {
-    if (function_exists('redirect')) {
-        redirect('login.php');
-    } else {
-        header('Location: login.php');
-        exit;
-    }
-}
-
-// Get user data from database
-try {
     $db = new Database();
     $conn = $db->getConnection();
     
@@ -56,24 +35,29 @@ try {
         throw new Exception('Database connection failed');
     }
 } catch (Exception $e) {
-    error_log('Error connecting to database in dashboard.php: ' . $e->getMessage());
+    error_log('Database error in dashboard.php: ' . $e->getMessage());
     http_response_code(500);
-    die('Error connecting to database. Please check error logs.');
+    die('Database connection failed. Please check error logs.');
 }
 
-// Check user role and redirect accordingly
+// Check if user is logged in
+if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+    header('Location: login.php');
+    exit;
+}
+
+$user_id = $_SESSION['user_id'];
+
+// Get user data
 try {
     $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
     $stmt->execute([$user_id]);
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$user) {
-        if (function_exists('redirect')) {
-            redirect('login.php');
-        } else {
-            header('Location: login.php');
-            exit;
-        }
+        session_destroy();
+        header('Location: login.php');
+        exit;
     }
 } catch (Exception $e) {
     error_log('Error fetching user in dashboard.php: ' . $e->getMessage());
@@ -81,77 +65,78 @@ try {
     die('Error loading user data. Please check error logs.');
 }
 
-// Check if admin is impersonating - don't redirect if impersonating
-$is_impersonating = isset($_SESSION['admin_impersonating']) && $_SESSION['admin_impersonating'];
-
-// Check if user is admin - redirect to admin dashboard (unless impersonating)
-if (isset($user['role']) && in_array($user['role'], ['admin', 'super_admin']) && !$is_impersonating) {
-    header('Location: admin/index.php');
-    exit;
+// Check if admin - redirect to admin dashboard
+if (isset($user['role']) && in_array($user['role'], ['admin', 'super_admin'])) {
+    if (!isset($_SESSION['admin_impersonating']) || !$_SESSION['admin_impersonating']) {
+        header('Location: admin/index.php');
+        exit;
+    }
 }
 
-// Check if user is artist - redirect to artist profile mobile
+// Check if artist - redirect to artist profile
 if (isset($user['role']) && $user['role'] === 'artist') {
     header('Location: artist-profile-mobile.php');
     exit;
 }
 
 // Get user stats
-// Check which favorites table exists (favorites or user_favorites)
-$favorites_table = 'user_favorites';
+$stats = [
+    'total_playlists' => 0,
+    'total_favorites' => 0,
+    'total_plays' => 0
+];
+
 try {
+    // Check which favorites table exists
+    $favorites_table = 'user_favorites';
     $check_stmt = $conn->query("SHOW TABLES LIKE 'favorites'");
-    if ($check_stmt->rowCount() > 0) {
+    if ($check_stmt && $check_stmt->rowCount() > 0) {
         $favorites_table = 'favorites';
     }
-} catch (Exception $e) {
-    // Default to user_favorites
-}
-
-// Check if play_history table exists
-$play_history_exists = false;
-try {
-    $check_ph = $conn->query("SHOW TABLES LIKE 'play_history'");
-    $play_history_exists = $check_ph->rowCount() > 0;
-} catch (Exception $e) {
+    
+    // Check if play_history table exists
     $play_history_exists = false;
-}
-
-// Build query based on available tables
-$stats_query = "
-    SELECT 
-        COUNT(DISTINCT p.id) as total_playlists,
-        COUNT(DISTINCT f.id) as total_favorites" . 
-        ($play_history_exists ? ",\n        COUNT(DISTINCT ph.id) as total_plays" : ",\n        0 as total_plays") . "
-    FROM users u
-    LEFT JOIN playlists p ON p.user_id = u.id
-    LEFT JOIN $favorites_table f ON f.user_id = u.id" . 
-    ($play_history_exists ? "\n    LEFT JOIN play_history ph ON ph.user_id = u.id" : "") . "
-    WHERE u.id = ?
-";
-
-$stmt = $conn->prepare($stats_query);
-$stmt->execute([$user_id]);
-$stats = $stmt->fetch(PDO::FETCH_ASSOC);
-
-// Get latest news from database
-$latest_news = [];
-try {
-    require_once 'config/database.php';
-    $db = new Database();
-    $conn = $db->getConnection();
-    if ($conn) {
-        $stmt = $conn->query("SELECT * FROM news WHERE is_published = 1 ORDER BY created_at DESC LIMIT 3");
-        $latest_news = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $check_ph = $conn->query("SHOW TABLES LIKE 'play_history'");
+    if ($check_ph && $check_ph->rowCount() > 0) {
+        $play_history_exists = true;
+    }
+    
+    // Build stats query
+    $stats_query = "
+        SELECT 
+            COUNT(DISTINCT p.id) as total_playlists,
+            COUNT(DISTINCT f.id) as total_favorites" . 
+            ($play_history_exists ? ", COUNT(DISTINCT ph.id) as total_plays" : ", 0 as total_plays") . "
+        FROM users u
+        LEFT JOIN playlists p ON p.user_id = u.id
+        LEFT JOIN $favorites_table f ON f.user_id = u.id" . 
+        ($play_history_exists ? " LEFT JOIN play_history ph ON ph.user_id = u.id" : "") . "
+        WHERE u.id = ?
+    ";
+    
+    $stmt = $conn->prepare($stats_query);
+    $stmt->execute([$user_id]);
+    $stats_result = $stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($stats_result) {
+        $stats = $stats_result;
     }
 } catch (Exception $e) {
-    error_log("Error getting latest news: " . $e->getMessage());
+    error_log('Error fetching stats: ' . $e->getMessage());
 }
 
-// Check if user is active
-$is_active = $user['is_active'] ?? 1;
+// Get latest news
+$latest_news = [];
+try {
+    $news_stmt = $conn->query("SELECT * FROM news WHERE is_published = 1 ORDER BY created_at DESC LIMIT 3");
+    if ($news_stmt) {
+        $latest_news = $news_stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Exception $e) {
+    error_log('Error fetching latest news: ' . $e->getMessage());
+}
 
-// Check if admin is impersonating (define again here for use in HTML)
+// Check impersonation
 $is_impersonating = isset($_SESSION['admin_impersonating']) && $_SESSION['admin_impersonating'];
 $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? 'Admin') : '';
 ?>
@@ -160,22 +145,15 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo htmlspecialchars($user['username']); ?> - Dashboard | <?php echo SITE_NAME; ?></title>
+    <title><?php echo htmlspecialchars($user['username']); ?> - Dashboard | <?php echo defined('SITE_NAME') ? SITE_NAME : 'Dashboard'; ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #f5f5f5;
             color: #333;
         }
-        
-        /* Header */
         .header {
             background: #4a4a4a;
             color: white;
@@ -184,13 +162,11 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             justify-content: space-between;
             align-items: center;
         }
-        
         .header-left {
             display: flex;
             align-items: center;
             gap: 10px;
         }
-        
         .site-logo {
             width: 35px;
             height: 35px;
@@ -203,30 +179,24 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             font-size: 18px;
             font-weight: bold;
         }
-        
         .site-name {
             font-size: 14px;
             font-weight: 600;
         }
-        
         .header-right {
             display: flex;
             gap: 15px;
             font-size: 13px;
         }
-        
         .header-right a {
             color: white;
             text-decoration: none;
         }
-        
-        /* Navigation */
         .nav-tabs {
             display: flex;
             background: #5a5a5a;
             overflow-x: auto;
         }
-        
         .nav-tab {
             flex: 1;
             text-align: center;
@@ -238,18 +208,13 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             border-bottom: 3px solid transparent;
             white-space: nowrap;
         }
-        
         .nav-tab.active {
             background: #4a4a4a;
             border-bottom-color: #ff6600;
         }
-        
-        /* Profile Container */
         .profile-container {
             padding: 20px 15px;
         }
-        
-        /* Edit Button */
         .edit-btn {
             position: absolute;
             top: 20px;
@@ -265,14 +230,11 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             color: #333;
             text-decoration: none;
         }
-        
-        /* Avatar Section */
         .avatar-section {
             text-align: center;
             margin-bottom: 20px;
             position: relative;
         }
-        
         .avatar {
             width: 120px;
             height: 120px;
@@ -286,60 +248,49 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             color: #999;
             overflow: hidden;
         }
-        
         .avatar img {
             width: 100%;
             height: 100%;
             object-fit: cover;
         }
-        
         .user-name {
             font-size: 22px;
             font-weight: 600;
             margin-bottom: 10px;
         }
-        
         .user-email {
             font-size: 14px;
             color: #666;
             margin-bottom: 15px;
         }
-        
-        /* Stats */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 10px;
             margin-bottom: 20px;
         }
-        
         .stat-card {
             background: white;
             border-radius: 8px;
             padding: 15px;
             text-align: center;
         }
-        
         .stat-number {
             font-size: 28px;
             font-weight: 700;
             color: #333;
             margin-bottom: 5px;
         }
-        
         .stat-label {
             font-size: 12px;
             color: #666;
         }
-        
-        /* Action Buttons */
         .action-buttons {
             display: flex;
             flex-direction: column;
             gap: 12px;
             margin-bottom: 25px;
         }
-        
         .btn {
             padding: 15px 20px;
             border: none;
@@ -351,25 +302,20 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             display: block;
             cursor: pointer;
         }
-        
         .btn-primary {
             background: #ff6600;
             color: white;
         }
-        
         .btn-secondary {
             background: #2196F3;
             color: white;
         }
-        
-        /* News Section */
         .news-section {
             background: white;
             border-radius: 8px;
             padding: 15px;
             margin-bottom: 60px;
         }
-        
         .news-header {
             font-size: 18px;
             font-weight: 600;
@@ -379,16 +325,13 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             align-items: center;
             gap: 10px;
         }
-        
         .news-item {
             padding: 12px 0;
             border-bottom: 1px solid #eee;
         }
-        
         .news-item:last-child {
             border-bottom: none;
         }
-        
         .news-title {
             font-size: 15px;
             font-weight: 600;
@@ -397,31 +340,25 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             text-decoration: none;
             display: block;
         }
-        
         .news-title:hover {
             color: #ff6600;
         }
-        
         .news-excerpt {
             font-size: 13px;
             color: #666;
             line-height: 1.4;
             margin-bottom: 5px;
         }
-        
         .news-date {
             font-size: 12px;
             color: #999;
         }
-        
         .no-news {
             text-align: center;
             padding: 20px;
             color: #999;
             font-style: italic;
         }
-        
-        /* Bottom Navigation */
         .bottom-nav {
             position: fixed;
             bottom: 0;
@@ -433,7 +370,6 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             justify-content: space-around;
             padding: 10px 0;
         }
-        
         .bottom-nav-item {
             display: flex;
             flex-direction: column;
@@ -443,13 +379,9 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             text-decoration: none;
             font-size: 20px;
         }
-        
         .bottom-nav-item.active {
             color: #ff6600;
         }
-    </style>
-    <style>
-        /* Impersonation Banner */
         .impersonation-banner {
             background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
             color: white;
@@ -460,7 +392,6 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             z-index: 1000;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        
         .impersonation-banner-content {
             max-width: 1200px;
             margin: 0 auto;
@@ -470,17 +401,11 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             gap: 20px;
             flex-wrap: wrap;
         }
-        
         .impersonation-banner-text {
             flex: 1;
             font-size: 14px;
             font-weight: 600;
         }
-        
-        .impersonation-banner-text i {
-            margin-right: 8px;
-        }
-        
         .impersonation-banner-btn {
             background: white;
             color: #ff6b6b;
@@ -489,13 +414,6 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
             text-decoration: none;
             font-weight: 600;
             font-size: 14px;
-            transition: transform 0.2s;
-            white-space: nowrap;
-        }
-        
-        .impersonation-banner-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
     </style>
 </head>
@@ -513,13 +431,13 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
         </div>
     </div>
     <?php endif; ?>
-    <!-- Header -->
+    
     <div class="header">
         <div class="header-left">
             <div class="site-logo">
                 <i class="fas fa-music"></i>
             </div>
-            <div class="site-name"><?php echo SITE_NAME; ?></div>
+            <div class="site-name"><?php echo defined('SITE_NAME') ? SITE_NAME : 'Music'; ?></div>
         </div>
         <div class="header-right">
             <a href="profile.php">Account</a>
@@ -528,7 +446,6 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
         </div>
     </div>
     
-    <!-- Navigation Tabs -->
     <div class="nav-tabs">
         <a href="dashboard.php" class="nav-tab active">DASHBOARD</a>
         <a href="my-playlists.php" class="nav-tab">PLAYLISTS</a>
@@ -536,14 +453,11 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
         <a href="recently-played.php" class="nav-tab">HISTORY</a>
     </div>
     
-    <!-- Profile Container -->
     <div class="profile-container">
-        <!-- Edit Button -->
         <a href="profile.php" class="edit-btn">
             Edit <i class="fas fa-cog"></i>
         </a>
         
-        <!-- Avatar Section -->
         <div class="avatar-section">
             <div class="avatar">
                 <?php if (!empty($user['avatar'])): ?>
@@ -552,36 +466,30 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
                     <i class="fas fa-user-circle"></i>
                 <?php endif; ?>
             </div>
-            
             <h1 class="user-name"><?php echo htmlspecialchars($user['username']); ?></h1>
             <div class="user-email"><?php echo htmlspecialchars($user['email']); ?></div>
         </div>
         
-        <!-- Stats -->
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-number"><?php echo number_format($stats['total_playlists'] ?? 0); ?></div>
+                <div class="stat-number"><?php echo number_format($stats['total_playlists']); ?></div>
                 <div class="stat-label">Playlists</div>
             </div>
-            
             <div class="stat-card">
-                <div class="stat-number"><?php echo number_format($stats['total_favorites'] ?? 0); ?></div>
+                <div class="stat-number"><?php echo number_format($stats['total_favorites']); ?></div>
                 <div class="stat-label">Favorites</div>
             </div>
-            
             <div class="stat-card">
-                <div class="stat-number"><?php echo number_format($stats['total_plays'] ?? 0); ?></div>
+                <div class="stat-number"><?php echo number_format($stats['total_plays']); ?></div>
                 <div class="stat-label">Plays</div>
             </div>
         </div>
         
-        <!-- Action Buttons -->
         <div class="action-buttons">
             <a href="browse.php" class="btn btn-primary">Discover Music</a>
             <a href="artists.php" class="btn btn-secondary">Browse Artists</a>
         </div>
         
-        <!-- Latest News Section -->
         <div class="news-section">
             <div class="news-header">
                 <i class="fas fa-newspaper"></i>
@@ -596,7 +504,7 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
                         </a>
                         <div class="news-excerpt">
                             <?php 
-                            $excerpt = strip_tags($news_item['content']);
+                            $excerpt = strip_tags($news_item['content'] ?? '');
                             echo htmlspecialchars(substr($excerpt, 0, 100)) . '...'; 
                             ?>
                         </div>
@@ -621,7 +529,6 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
         </div>
     </div>
     
-    <!-- Bottom Navigation -->
     <div class="bottom-nav">
         <a href="index.php" class="bottom-nav-item">
             <i class="fas fa-home"></i>
