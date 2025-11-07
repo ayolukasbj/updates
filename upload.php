@@ -7,12 +7,74 @@ if (ob_get_level() == 0) {
     ob_start();
 }
 
-require_once 'config/config.php';
-require_once 'includes/song-storage.php';
+// Error handling
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+
+try {
+    require_once 'config/config.php';
+    require_once 'includes/song-storage.php';
+} catch (Exception $e) {
+    error_log("Error loading config in upload.php: " . $e->getMessage());
+    http_response_code(500);
+    die("Configuration error. Please check error logs.");
+}
 
 // Redirect if not logged in and verified (skip if already checked in including file)
 if (!isset($editing_song)) {
-    require_login();
+    try {
+        require_login();
+    } catch (Exception $e) {
+        error_log("Error in require_login() in upload.php: " . $e->getMessage());
+        // Redirect to login on error
+        if (!headers_sent()) {
+            header('Location: ' . SITE_URL . 'login.php');
+            exit;
+        }
+    }
+}
+
+// Check license validity - disable upload if license is invalid
+try {
+    if (file_exists(__DIR__ . '/config/license.php')) {
+        require_once 'config/license.php';
+        
+        // Check if function exists before calling
+        if (function_exists('isLicenseValid')) {
+            if (!isLicenseValid()) {
+                http_response_code(403);
+                die('
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Upload Disabled - License Invalid</title>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <style>
+                        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+                        .error-box { background: white; padding: 40px; border-radius: 10px; max-width: 600px; margin: 0 auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+                        h1 { color: #dc3545; margin-bottom: 20px; }
+                        p { color: #666; line-height: 1.8; margin-bottom: 15px; }
+                        .btn { display: inline-block; padding: 12px 24px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="error-box">
+                        <h1>Upload Feature Disabled</h1>
+                        <p><strong>This feature is unavailable because your license is invalid or has been deactivated.</strong></p>
+                        <p>Please activate or renew your license to use this feature.</p>
+                        <a href="' . (defined('SITE_URL') ? SITE_URL : '/') . 'admin/license-management.php" class="btn">Manage License</a>
+                    </div>
+                </body>
+                </html>
+                ');
+            }
+        }
+    }
+} catch (Exception $e) {
+    error_log("Error checking license in upload.php: " . $e->getMessage());
+    // Allow upload if license check fails (fail open for now)
 }
 
 $error = '';
