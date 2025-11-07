@@ -169,6 +169,27 @@ function redirect($url) {
 }
 
 /**
+ * Generate a random token
+ */
+if (!function_exists('generate_token')) {
+    function generate_token($length = 32) {
+        if (function_exists('random_bytes')) {
+            return bin2hex(random_bytes($length));
+        } elseif (function_exists('openssl_random_pseudo_bytes')) {
+            return bin2hex(openssl_random_pseudo_bytes($length));
+        } else {
+            // Fallback for older PHP versions
+            $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            $token = '';
+            for ($i = 0; $i < $length * 2; $i++) {
+                $token .= $characters[rand(0, strlen($characters) - 1)];
+            }
+            return $token;
+        }
+    }
+}
+
+/**
  * Get base URL path (removes hardcoded /music/)
  */
 function base_url($path = '') {

@@ -67,12 +67,30 @@ class AuthController {
             ];
 
             // Validation
-            $errors = $this->validateRegistration($data);
+            try {
+                $errors = $this->validateRegistration($data);
+            } catch (Exception $e) {
+                error_log('Validation error: ' . $e->getMessage());
+                $_SESSION['error_message'] = 'Validation error: ' . $e->getMessage();
+                $errors = ['Validation failed'];
+            }
             
             if (empty($errors)) {
-                $result = $this->user->register($data);
+                try {
+                    $result = $this->user->register($data);
+                } catch (Exception $e) {
+                    error_log('Register method error: ' . $e->getMessage());
+                    error_log('Stack trace: ' . $e->getTraceAsString());
+                    $_SESSION['error_message'] = 'Registration failed: ' . $e->getMessage();
+                    $result = ['success' => false, 'error' => 'Registration failed. Please try again.'];
+                } catch (Error $e) {
+                    error_log('Register method fatal error: ' . $e->getMessage());
+                    error_log('Stack trace: ' . $e->getTraceAsString());
+                    $_SESSION['error_message'] = 'Registration failed. Please contact support.';
+                    $result = ['success' => false, 'error' => 'Registration failed. Please contact support.'];
+                }
                 
-                if ($result['success']) {
+                if (isset($result['success']) && $result['success']) {
                     // Check if email verification is required
                     $require_verification = $this->getEmailVerificationSetting();
                     
