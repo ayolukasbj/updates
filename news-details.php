@@ -18,8 +18,17 @@ if (ob_get_level() == 0) {
 
 // Determine base directory (handle being called from news/ folder)
 $base_dir = dirname(__FILE__);
-if (basename($base_dir) === 'news') {
+if (basename($base_dir) === 'news' || defined('CALLED_FROM_NEWS_FOLDER')) {
     $base_dir = dirname($base_dir);
+}
+// Also check if we're in a subdirectory
+if (strpos($base_dir, 'news') !== false && basename($base_dir) !== 'news') {
+    // We might be deeper, go up until we find the root
+    while (basename($base_dir) !== '' && basename($base_dir) !== 'public_html' && basename($base_dir) !== 'htdocs') {
+        $parent = dirname($base_dir);
+        if ($parent === $base_dir) break; // Reached root
+        $base_dir = $parent;
+    }
 }
 
 // Load config with error handling

@@ -112,7 +112,14 @@ class AuthController {
                     $_SESSION['error_message'] = 'Please verify your email before logging in.';
                 } else {
                     $_SESSION['success_message'] = 'Welcome back!';
-                    redirect(SITE_URL . '/dashboard.php');
+                    // Redirect to dashboard or homepage
+                    $redirect_url = defined('SITE_URL') ? SITE_URL . '/dashboard.php' : '/dashboard.php';
+                    if (function_exists('redirect')) {
+                        redirect($redirect_url);
+                    } else {
+                        header('Location: ' . $redirect_url);
+                        exit;
+                    }
                 }
                 } else {
                     $_SESSION['error_message'] = $result['error'];
