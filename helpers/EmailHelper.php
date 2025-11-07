@@ -190,11 +190,12 @@ class EmailHelper {
             // Authentication headers
             $mail->addCustomHeader('Authentication-Results', $domain . '; auth=pass');
             
-            // Precedence header
-            $mail->addCustomHeader('Precedence', 'bulk');
-            
             // Content language
             $mail->addCustomHeader('Content-Language', 'en-US');
+            
+            // Remove Precedence: bulk as it can trigger spam filters
+            // Instead, use Return-Path for better deliverability
+            $mail->addCustomHeader('Return-Path', $from_email);
             
             $mail->send();
             error_log("Email sent successfully via SMTP to: $to");
@@ -236,22 +237,21 @@ class EmailHelper {
         $email_headers .= "X-Priority: 3" . "\r\n";
         $email_headers .= "X-MSMail-Priority: Normal" . "\r\n";
         $email_headers .= "Importance: Normal" . "\r\n";
-        $email_headers .= "Precedence: bulk" . "\r\n";
+        // Removed Precedence: bulk as it can trigger spam filters
         $email_headers .= "Content-Language: en-US" . "\r\n";
-        
-        // List management headers
-        $email_headers .= "List-Unsubscribe: <" . (defined('SITE_URL') ? SITE_URL : '') . "/unsubscribe>" . "\r\n";
-        $email_headers .= "List-Unsubscribe-Post: List-Unsubscribe=One-Click" . "\r\n";
+        $email_headers .= "Return-Path: " . $from_email . "\r\n";
         
         // Message-ID for better deliverability
-        $message_id = '<' . time() . '.' . md5($to . $subject) . '@' . $domain . '>';
+        $message_id = '<' . time() . '.' . md5($to . $subject) . '@' . ($domain !== 'localhost' ? $domain : 'example.com') . '>';
         $email_headers .= "Message-ID: " . $message_id . "\r\n";
         
         // Date header
         $email_headers .= "Date: " . date('r') . "\r\n";
         
-        // Authentication headers
-        $email_headers .= "Authentication-Results: " . $domain . "; auth=pass" . "\r\n";
+        // Authentication headers - only add if domain is valid
+        if (!empty($domain) && $domain !== 'localhost') {
+            $email_headers .= "Authentication-Results: " . $domain . "; auth=pass" . "\r\n";
+        }
         
         // Add custom headers
         if (!empty($headers)) {

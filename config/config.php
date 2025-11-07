@@ -142,10 +142,145 @@ if (php_sapi_name() !== 'cli' && session_status() === PHP_SESSION_NONE) {
 }
 
 /**
- * Check if user is logged in
+ * Check if user is logged in (and verified if email verification is required)
  */
 function is_logged_in() {
-    return isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
+    if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+        return false;
+    }
+    
+    // Check email verification if required
+    return is_user_verified();
+}
+
+/**
+ * Check if current user's email is verified (or verification is not required)
+ */
+function is_user_verified() {
+    if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+        return false;
+    }
+    
+    // Check if email verification is required
+    try {
+        if (file_exists(__DIR__ . '/database.php')) {
+            require_once __DIR__ . '/database.php';
+            $db = new Database();
+            $conn = $db->getConnection();
+            
+            if ($conn) {
+                // Check if email verification is required
+                $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'require_email_verification'");
+                $stmt->execute();
+                $result = $stmt->fetch(PDO::FETCH_ASSOC);
+                $require_verification = ($result['setting_value'] ?? 'false') === 'true' || ($result['setting_value'] ?? '0') === '1';
+                
+                if (!$require_verification) {
+                    // Verification not required, user is considered verified
+                    return true;
+                }
+                
+                // Verification is required, check user's verification status
+                // Check both email_verified and is_verified columns (for backward compatibility)
+                $user_stmt = $conn->prepare("
+                    SELECT email_verified, is_verified, role 
+                    FROM users 
+                    WHERE id = ? AND is_active = 1
+                ");
+                $user_stmt->execute([$_SESSION['user_id']]);
+                $user = $user_stmt->fetch(PDO::FETCH_ASSOC);
+                
+                if (!$user) {
+                    // User not found or inactive
+                    return false;
+                }
+                
+                // Admin and super_admin bypass email verification
+                if (in_array($user['role'] ?? '', ['admin', 'super_admin'])) {
+                    return true;
+                }
+                
+                // Check verification status
+                $is_verified = false;
+                if (isset($user['email_verified'])) {
+                    $is_verified = (bool)$user['email_verified'];
+                } elseif (isset($user['is_verified'])) {
+                    $is_verified = (bool)$user['is_verified'];
+                }
+                
+                return $is_verified;
+            }
+        }
+    } catch (Exception $e) {
+        error_log('Error checking email verification: ' . $e->getMessage());
+        // On error, allow access (fail open) to prevent locking users out
+        return true;
+    }
+    
+    // If we can't check, allow access (fail open)
+    return true;
+}
+
+/**
+ * Require login and email verification for protected pages
+ * Redirects to login if not logged in, or shows verification message if not verified
+ */
+function require_login($redirect_to_login = true) {
+    if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+        if ($redirect_to_login) {
+            $login_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/login.php' : '/login.php';
+            if (!headers_sent()) {
+                header('Location: ' . $login_url);
+                exit;
+            } else {
+                echo '<script>window.location.href = "' . htmlspecialchars($login_url) . '";</script>';
+                exit;
+            }
+        }
+        return false;
+    }
+    
+    // Check if email verification is required
+    if (!is_user_verified()) {
+        $_SESSION['error_message'] = 'Please verify your email address before accessing this page.';
+        
+        // Get user email from database if not in session
+        if (empty($_SESSION['user_email'])) {
+            try {
+                if (file_exists(__DIR__ . '/database.php')) {
+                    require_once __DIR__ . '/database.php';
+                    $db = new Database();
+                    $conn = $db->getConnection();
+                    if ($conn) {
+                        $stmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
+                        $stmt->execute([$_SESSION['user_id']]);
+                        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+                        if ($user) {
+                            $_SESSION['user_email'] = $user['email'];
+                        }
+                    }
+                }
+            } catch (Exception $e) {
+                error_log('Error getting user email: ' . $e->getMessage());
+            }
+        }
+        
+        $_SESSION['unverified_email'] = $_SESSION['user_email'] ?? '';
+        
+        if ($redirect_to_login) {
+            $login_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/login.php' : '/login.php';
+            if (!headers_sent()) {
+                header('Location: ' . $login_url);
+                exit;
+            } else {
+                echo '<script>window.location.href = "' . htmlspecialchars($login_url) . '";</script>';
+                exit;
+            }
+        }
+        return false;
+    }
+    
+    return true;
 }
 
 /**

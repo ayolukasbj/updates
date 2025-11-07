@@ -27,10 +27,10 @@ try {
     if (!file_exists('config/database.php')) {
         throw new Exception('Database config not found');
     }
-    require_once 'config/database.php';
-    $db = new Database();
-    $conn = $db->getConnection();
-    
+require_once 'config/database.php';
+$db = new Database();
+$conn = $db->getConnection();
+
     if (!$conn) {
         throw new Exception('Database connection failed');
     }
@@ -40,21 +40,18 @@ try {
     die('Database connection failed. Please check error logs.');
 }
 
-// Check if user is logged in
-if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
-    header('Location: login.php');
-    exit;
-}
+// Check if user is logged in and verified
+require_login();
 
 $user_id = $_SESSION['user_id'];
 
 // Get user data
 try {
-    $stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
-    $stmt->execute([$user_id]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
-    
-    if (!$user) {
+$stmt = $conn->prepare("SELECT * FROM users WHERE id = ?");
+$stmt->execute([$user_id]);
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if (!$user) {
         session_destroy();
         header('Location: login.php');
         exit;
@@ -68,8 +65,8 @@ try {
 // Check if admin - redirect to admin dashboard
 if (isset($user['role']) && in_array($user['role'], ['admin', 'super_admin'])) {
     if (!isset($_SESSION['admin_impersonating']) || !$_SESSION['admin_impersonating']) {
-        header('Location: admin/index.php');
-        exit;
+    header('Location: admin/index.php');
+    exit;
     }
 }
 
@@ -88,34 +85,34 @@ $stats = [
 
 try {
     // Check which favorites table exists
-    $favorites_table = 'user_favorites';
+$favorites_table = 'user_favorites';
     $check_stmt = $conn->query("SHOW TABLES LIKE 'favorites'");
     if ($check_stmt && $check_stmt->rowCount() > 0) {
         $favorites_table = 'favorites';
-    }
-    
-    // Check if play_history table exists
-    $play_history_exists = false;
+}
+
+// Check if play_history table exists
+$play_history_exists = false;
     $check_ph = $conn->query("SHOW TABLES LIKE 'play_history'");
     if ($check_ph && $check_ph->rowCount() > 0) {
         $play_history_exists = true;
-    }
-    
+}
+
     // Build stats query
-    $stats_query = "
-        SELECT 
-            COUNT(DISTINCT p.id) as total_playlists,
-            COUNT(DISTINCT f.id) as total_favorites" . 
+$stats_query = "
+    SELECT 
+        COUNT(DISTINCT p.id) as total_playlists,
+        COUNT(DISTINCT f.id) as total_favorites" . 
             ($play_history_exists ? ", COUNT(DISTINCT ph.id) as total_plays" : ", 0 as total_plays") . "
-        FROM users u
-        LEFT JOIN playlists p ON p.user_id = u.id
-        LEFT JOIN $favorites_table f ON f.user_id = u.id" . 
+    FROM users u
+    LEFT JOIN playlists p ON p.user_id = u.id
+    LEFT JOIN $favorites_table f ON f.user_id = u.id" . 
         ($play_history_exists ? " LEFT JOIN play_history ph ON ph.user_id = u.id" : "") . "
-        WHERE u.id = ?
-    ";
-    
-    $stmt = $conn->prepare($stats_query);
-    $stmt->execute([$user_id]);
+    WHERE u.id = ?
+";
+
+$stmt = $conn->prepare($stats_query);
+$stmt->execute([$user_id]);
     $stats_result = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if ($stats_result) {
@@ -149,7 +146,7 @@ $admin_username = $is_impersonating ? ($_SESSION['admin_original_username'] ?? '
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
+        body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #f5f5f5;
             color: #333;

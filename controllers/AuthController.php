@@ -115,17 +115,35 @@ class AuthController {
                                 $_SESSION['success_message'] = 'Registration successful! However, verification email could not be sent. Please contact support.';
                             }
                             // Auto-verify if email sending fails (admin can verify manually later)
-                            $this->user->verifyEmail($result['verification_token']);
+                            try {
+                                if (method_exists($this->user, 'verifyEmail')) {
+                                    $this->user->verifyEmail($result['verification_token']);
+                                }
+                            } catch (Exception $e) {
+                                error_log('Auto-verify error: ' . $e->getMessage());
+                            }
                         }
                     } else {
                         // No verification required - auto verify
-                        $this->user->verifyEmail($result['verification_token']);
+                        try {
+                            if (method_exists($this->user, 'verifyEmail')) {
+                                $this->user->verifyEmail($result['verification_token']);
+                            }
+                        } catch (Exception $e) {
+                            error_log('Auto-verify error: ' . $e->getMessage());
+                        }
                         $_SESSION['success_message'] = 'Registration successful! You can now login.';
                     }
                     
+                    // Clear output buffer before redirect
+                    if (ob_get_level() > 0) {
+                        ob_end_clean();
+                    }
                     redirect(SITE_URL . '/login.php');
                 } else {
-                    $_SESSION['error_message'] = $result['error'];
+                    $error_msg = isset($result['error']) ? $result['error'] : 'Registration failed. Please try again.';
+                    $_SESSION['error_message'] = $error_msg;
+                    error_log('Registration failed in controller: ' . $error_msg);
                 }
             } else {
                 $_SESSION['error_message'] = implode('<br>', $errors);
@@ -160,6 +178,8 @@ class AuthController {
                 
                 if ($require_verification && !$result['user']['email_verified']) {
                     $_SESSION['error_message'] = 'Please verify your email before logging in.';
+                    $_SESSION['unverified_email'] = $result['user']['email']; // Store email for resend
+                    // Don't redirect, show login form with resend button
                 } else {
                     $_SESSION['success_message'] = 'Welcome back!';
                     
@@ -272,15 +292,116 @@ class AuthController {
 
     // Handle email verification
     public function verifyEmail() {
-        $token = $_GET['token'] ?? '';
-        
-        if ($this->user->verifyEmail($token)) {
-            $_SESSION['success_message'] = 'Email verified successfully! You can now login.';
-        } else {
-            $_SESSION['error_message'] = 'Invalid or expired verification token.';
+        try {
+            $token = $_GET['token'] ?? '';
+            
+            if (empty($token)) {
+                $_SESSION['error_message'] = 'Verification token is required.';
+                redirect(SITE_URL . '/login.php');
+                return;
+            }
+            
+            if (method_exists($this->user, 'verifyEmail')) {
+                $result = $this->user->verifyEmail($token);
+                
+                if ($result) {
+                    $_SESSION['success_message'] = 'Email verified successfully! You can now login.';
+                } else {
+                    $_SESSION['error_message'] = 'Invalid or expired verification token. Please request a new verification email.';
+                }
+            } else {
+                $_SESSION['error_message'] = 'Email verification is not available.';
+            }
+        } catch (Exception $e) {
+            error_log('Email verification error: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            $_SESSION['error_message'] = 'Email verification failed. Please contact support.';
+        } catch (Error $e) {
+            error_log('Email verification fatal error: ' . $e->getMessage());
+            error_log('Stack trace: ' . $e->getTraceAsString());
+            $_SESSION['error_message'] = 'Email verification failed. Please contact support.';
         }
         
+        // Clear output buffer before redirect
+        if (ob_get_level() > 0) {
+            ob_end_clean();
+        }
         redirect(SITE_URL . '/login.php');
+    }
+    
+    // Resend verification email
+    public function resendVerification() {
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $email = sanitize_input($_POST['email'] ?? '');
+            
+            if (empty($email)) {
+                $_SESSION['error_message'] = 'Email address is required.';
+                return;
+            }
+            
+            try {
+                // Get user by email
+                $user_data = $this->user->getUserByEmail($email);
+                
+                if (!$user_data) {
+                    $_SESSION['error_message'] = 'Email address not found.';
+                    return;
+                }
+                
+                // Check if already verified
+                if (!empty($user_data['email_verified'])) {
+                    $_SESSION['error_message'] = 'This email is already verified.';
+                    return;
+                }
+                
+                // Generate new verification token
+                if (!function_exists('generate_token')) {
+                    function generate_token($length = 32) {
+                        if (function_exists('random_bytes')) {
+                            return bin2hex(random_bytes($length));
+                        } elseif (function_exists('openssl_random_pseudo_bytes')) {
+                            return bin2hex(openssl_random_pseudo_bytes($length));
+                        } else {
+                            $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                            $token = '';
+                            for ($i = 0; $i < $length * 2; $i++) {
+                                $token .= $characters[rand(0, strlen($characters) - 1)];
+                            }
+                            return $token;
+                        }
+                    }
+                }
+                
+                $new_token = generate_token();
+                
+                // Update user with new token
+                try {
+                    $stmt = $this->db->prepare("UPDATE users SET verification_token = ? WHERE email = ?");
+                    $stmt->execute([$new_token, $email]);
+                } catch (Exception $e) {
+                    error_log('Error updating verification token: ' . $e->getMessage());
+                    $_SESSION['error_message'] = 'Failed to generate verification token.';
+                    return;
+                }
+                
+                // Send verification email
+                $email_sent = false;
+                if (class_exists('EmailHelper')) {
+                    $email_sent = EmailHelper::sendVerificationEmail($email, $new_token);
+                } else {
+                    $email_sent = $this->sendVerificationEmail($email, $new_token);
+                }
+                
+                if ($email_sent) {
+                    $_SESSION['success_message'] = 'Verification email sent! Please check your inbox and spam folder.';
+                } else {
+                    $_SESSION['error_message'] = 'Failed to send verification email. Please try again later or contact support.';
+                }
+            } catch (Exception $e) {
+                error_log('Resend verification error: ' . $e->getMessage());
+                $_SESSION['error_message'] = 'Failed to resend verification email. Please try again later.';
+            }
+        }
     }
 
     // Validate registration data

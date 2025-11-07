@@ -150,13 +150,23 @@ class User {
                 // Update last login
                 $this->updateLastLogin($row['id']);
                 
-                // Set session
+                // Set session (include email for verification checks)
                 $_SESSION['user_id'] = $row['id'];
                 $_SESSION['username'] = $row['username'];
                 $_SESSION['email'] = $row['email'];
+                $_SESSION['user_email'] = $row['email']; // Store for verification checks
                 $_SESSION['subscription_type'] = $row['subscription_type'];
                 
-                return ['success' => true, 'user' => $row];
+                return [
+                    'success' => true,
+                    'user' => [
+                        'id' => $row['id'],
+                        'username' => $row['username'],
+                        'email' => $row['email'],
+                        'subscription_type' => $row['subscription_type'],
+                        'email_verified' => $row['email_verified'] ?? 0
+                    ]
+                ];
             }
         }
         
