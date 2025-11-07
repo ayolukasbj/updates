@@ -103,7 +103,7 @@ class AuthController {
                         }
                         
                         if ($email_sent) {
-                            $_SESSION['success_message'] = 'Registration successful! Please check your email to verify your account.';
+                            $_SESSION['success_message'] = 'Registration successful! Please check your email (including spam folder) to verify your account.';
                         } else {
                             // Check if we're on localhost
                             $is_localhost = (strpos($_SERVER['HTTP_HOST'], 'localhost') !== false || 
@@ -297,8 +297,14 @@ class AuthController {
             
             if (empty($token)) {
                 $_SESSION['error_message'] = 'Verification token is required.';
-                redirect(SITE_URL . '/login.php');
-                return;
+                $login_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/login.php' : '/login.php';
+                if (!headers_sent()) {
+                    header('Location: ' . $login_url);
+                    exit;
+                } else {
+                    echo '<script>window.location.href = "' . htmlspecialchars($login_url) . '";</script>';
+                    exit;
+                }
             }
             
             if (method_exists($this->user, 'verifyEmail')) {
@@ -334,17 +340,38 @@ class AuthController {
                         }
                     } else {
                         $_SESSION['success_message'] = 'Email verified successfully! You can now login.';
-                        redirect(SITE_URL . '/login.php');
+                        $login_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/login.php' : '/login.php';
+                        if (!headers_sent()) {
+                            header('Location: ' . $login_url);
+                            exit;
+                        } else {
+                            echo '<script>window.location.href = "' . htmlspecialchars($login_url) . '";</script>';
+                            exit;
+                        }
                     }
                 } else {
                     // Verification failed
                     $error_msg = is_array($result) && isset($result['error']) ? $result['error'] : 'Invalid or expired verification token. Please request a new verification email.';
                     $_SESSION['error_message'] = $error_msg;
-                    redirect(SITE_URL . '/login.php');
+                    $login_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/login.php' : '/login.php';
+                    if (!headers_sent()) {
+                        header('Location: ' . $login_url);
+                        exit;
+                    } else {
+                        echo '<script>window.location.href = "' . htmlspecialchars($login_url) . '";</script>';
+                        exit;
+                    }
                 }
             } else {
                 $_SESSION['error_message'] = 'Email verification is not available.';
-                redirect(SITE_URL . '/login.php');
+                $login_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/login.php' : '/login.php';
+                if (!headers_sent()) {
+                    header('Location: ' . $login_url);
+                    exit;
+                } else {
+                    echo '<script>window.location.href = "' . htmlspecialchars($login_url) . '";</script>';
+                    exit;
+                }
             }
         } catch (Exception $e) {
             error_log('Email verification error: ' . $e->getMessage());
@@ -355,7 +382,14 @@ class AuthController {
             if (ob_get_level() > 0) {
                 ob_end_clean();
             }
-            redirect(SITE_URL . '/login.php');
+            $login_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/login.php' : '/login.php';
+            if (!headers_sent()) {
+                header('Location: ' . $login_url);
+                exit;
+            } else {
+                echo '<script>window.location.href = "' . htmlspecialchars($login_url) . '";</script>';
+                exit;
+            }
         } catch (Error $e) {
             error_log('Email verification fatal error: ' . $e->getMessage());
             error_log('Stack trace: ' . $e->getTraceAsString());
@@ -365,7 +399,14 @@ class AuthController {
             if (ob_get_level() > 0) {
                 ob_end_clean();
             }
-            redirect(SITE_URL . '/login.php');
+            $login_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/login.php' : '/login.php';
+            if (!headers_sent()) {
+                header('Location: ' . $login_url);
+                exit;
+            } else {
+                echo '<script>window.location.href = "' . htmlspecialchars($login_url) . '";</script>';
+                exit;
+            }
         }
     }
     
@@ -447,6 +488,11 @@ class AuthController {
     // Validate registration data
     private function validateRegistration($data) {
         $errors = [];
+        
+        // Check terms and privacy policy agreement
+        if (empty($_POST['terms']) || $_POST['terms'] !== '1') {
+            $errors[] = 'You must agree to the Terms of Service and Privacy Policy to register.';
+        }
         
         if (empty($data['username'])) {
             $errors[] = 'Username is required.';
