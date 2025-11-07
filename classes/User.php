@@ -294,14 +294,67 @@ class User {
 
     // Verify email
     public function verifyEmail($token) {
-        $query = "UPDATE " . $this->table . " 
-                  SET email_verified = 1, verification_token = NULL 
-                  WHERE verification_token = :token";
-        
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':token', $token);
-        
-        return $stmt->execute() && $stmt->rowCount() > 0;
+        try {
+            if (empty($token)) {
+                error_log('VerifyEmail: Empty token provided');
+                return ['success' => false, 'error' => 'Token is required'];
+            }
+            
+            // First, get user info before updating
+            $getUserQuery = "SELECT id, username, email, password, subscription_type, is_active, email_verified 
+                           FROM " . $this->table . " 
+                           WHERE verification_token = :token AND (email_verified = 0 OR email_verified IS NULL)";
+            $getUserStmt = $this->conn->prepare($getUserQuery);
+            $getUserStmt->bindParam(':token', $token);
+            $getUserStmt->execute();
+            $user = $getUserStmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$user) {
+                error_log('VerifyEmail: No user found with token: ' . substr($token, 0, 10) . '...');
+                return ['success' => false, 'error' => 'Invalid or expired verification token'];
+            }
+            
+            // Update email verification status
+            $query = "UPDATE " . $this->table . " 
+                      SET email_verified = 1, verification_token = NULL 
+                      WHERE verification_token = :token AND (email_verified = 0 OR email_verified IS NULL)";
+            
+            $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':token', $token);
+            
+            if ($stmt->execute()) {
+                $rowCount = $stmt->rowCount();
+                if ($rowCount > 0) {
+                    error_log('VerifyEmail: Successfully verified email for token: ' . substr($token, 0, 10) . '...');
+                    // Return user data for auto-login
+                    return [
+                        'success' => true,
+                        'user' => [
+                            'id' => $user['id'],
+                            'username' => $user['username'],
+                            'email' => $user['email'],
+                            'subscription_type' => $user['subscription_type'] ?? 'free',
+                            'email_verified' => 1
+                        ]
+                    ];
+                } else {
+                    error_log('VerifyEmail: No rows updated. Token may be invalid or already verified.');
+                    return ['success' => false, 'error' => 'Token already used or invalid'];
+                }
+            } else {
+                $errorInfo = $stmt->errorInfo();
+                error_log('VerifyEmail: SQL execution failed: ' . print_r($errorInfo, true));
+                return ['success' => false, 'error' => 'Verification failed'];
+            }
+        } catch (Exception $e) {
+            error_log('VerifyEmail: Exception: ' . $e->getMessage());
+            error_log('VerifyEmail: Stack trace: ' . $e->getTraceAsString());
+            return ['success' => false, 'error' => 'Verification error: ' . $e->getMessage()];
+        } catch (Error $e) {
+            error_log('VerifyEmail: Fatal error: ' . $e->getMessage());
+            error_log('VerifyEmail: Stack trace: ' . $e->getTraceAsString());
+            return ['success' => false, 'error' => 'Verification error: ' . $e->getMessage()];
+        }
     }
 
     // Request password reset

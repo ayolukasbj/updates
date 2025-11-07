@@ -304,29 +304,69 @@ class AuthController {
             if (method_exists($this->user, 'verifyEmail')) {
                 $result = $this->user->verifyEmail($token);
                 
-                if ($result) {
-                    $_SESSION['success_message'] = 'Email verified successfully! You can now login.';
+                if (is_array($result) && isset($result['success']) && $result['success']) {
+                    // Email verified successfully - auto-login the user
+                    if (isset($result['user'])) {
+                        $user = $result['user'];
+                        
+                        // Set session for auto-login
+                        $_SESSION['user_id'] = $user['id'];
+                        $_SESSION['username'] = $user['username'];
+                        $_SESSION['email'] = $user['email'];
+                        $_SESSION['user_email'] = $user['email'];
+                        $_SESSION['subscription_type'] = $user['subscription_type'] ?? 'free';
+                        
+                        $_SESSION['success_message'] = 'Email verified successfully! You have been logged in.';
+                        
+                        // Clear output buffer before redirect
+                        if (ob_get_level() > 0) {
+                            ob_end_clean();
+                        }
+                        
+                        // Redirect to dashboard
+                        $redirect_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/dashboard.php' : '/dashboard.php';
+                        if (!headers_sent()) {
+                            header('Location: ' . $redirect_url, true, 302);
+                            exit;
+                        } else {
+                            echo '<script>window.location.href = "' . htmlspecialchars($redirect_url) . '";</script>';
+                            exit;
+                        }
+                    } else {
+                        $_SESSION['success_message'] = 'Email verified successfully! You can now login.';
+                        redirect(SITE_URL . '/login.php');
+                    }
                 } else {
-                    $_SESSION['error_message'] = 'Invalid or expired verification token. Please request a new verification email.';
+                    // Verification failed
+                    $error_msg = is_array($result) && isset($result['error']) ? $result['error'] : 'Invalid or expired verification token. Please request a new verification email.';
+                    $_SESSION['error_message'] = $error_msg;
+                    redirect(SITE_URL . '/login.php');
                 }
             } else {
                 $_SESSION['error_message'] = 'Email verification is not available.';
+                redirect(SITE_URL . '/login.php');
             }
         } catch (Exception $e) {
             error_log('Email verification error: ' . $e->getMessage());
             error_log('Stack trace: ' . $e->getTraceAsString());
             $_SESSION['error_message'] = 'Email verification failed. Please contact support.';
+            
+            // Clear output buffer before redirect
+            if (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+            redirect(SITE_URL . '/login.php');
         } catch (Error $e) {
             error_log('Email verification fatal error: ' . $e->getMessage());
             error_log('Stack trace: ' . $e->getTraceAsString());
             $_SESSION['error_message'] = 'Email verification failed. Please contact support.';
+            
+            // Clear output buffer before redirect
+            if (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+            redirect(SITE_URL . '/login.php');
         }
-        
-        // Clear output buffer before redirect
-        if (ob_get_level() > 0) {
-            ob_end_clean();
-        }
-        redirect(SITE_URL . '/login.php');
     }
     
     // Resend verification email
