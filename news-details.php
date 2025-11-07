@@ -259,31 +259,21 @@ $share_image = !empty($news_item['featured_image'])
     
     <!-- Font Awesome for icons -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="assets/css/luo-style.css" rel="stylesheet">
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             color: #333;
             line-height: 1.6;
+            padding-bottom: 120px;
         }
-        .page-wrap {
+        .main-content {
             max-width: 1400px;
             margin: 0 auto;
-            padding: 20px;
-        }
-        .breadcrumb {
-            padding: 15px 0;
-            font-size: 14px;
-            color: #666;
-        }
-        .breadcrumb a {
-            color: #007bff;
-            text-decoration: none;
-        }
-        .breadcrumb a:hover {
-            text-decoration: underline;
+            padding: 25px 20px;
         }
         .content-grid {
             display: grid;
@@ -492,11 +482,7 @@ $share_image = !empty($news_item['featured_image'])
     }
     ?>
     
-    <div class="page-wrap">
-        <div class="breadcrumb">
-            <a href="index.php">Home</a> / <a href="news.php">News</a> / <span><?php echo htmlspecialchars($news_item['title']); ?></span>
-        </div>
-
+    <div class="main-content">
         <div class="content-grid">
             <div class="post-content">
                 <h1 class="post-title"><?php echo htmlspecialchars($news_item['title']); ?></h1>
