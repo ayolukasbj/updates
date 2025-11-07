@@ -1249,26 +1249,23 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 <!-- Featured Image -->
                 <?php 
                 // Get featured image - match homepage logic exactly
-                // Homepage uses: $carousel_news['image'] directly without asset_path()
-                // Check featured_image first (if column exists), then fallback to image
-                $featured_img = '';
-                if (!empty($news_item['featured_image'])) {
-                    $featured_img = $news_item['featured_image'];
-                } elseif (!empty($news_item['image'])) {
-                    $featured_img = $news_item['image'];
-                } elseif (!empty($news_item['display_image'])) {
-                    $featured_img = $news_item['display_image'];
-                }
-                
-                if (!empty($featured_img)): 
-                    // Use image directly like homepage does, without asset_path()
-                    $img_url = htmlspecialchars($featured_img);
+                // Homepage uses: $carousel_news['image'] directly
+                // Since we use SELECT n.*, we have access to both 'image' and 'featured_image' fields
+                // Use the same logic as homepage: check 'image' field directly
+                if (!empty($news_item['image'])): 
                 ?>
                 <div class="article-featured-image">
-                    <img src="<?php echo $img_url; ?>" 
+                    <img src="<?php echo htmlspecialchars($news_item['image']); ?>" 
                          alt="<?php echo htmlspecialchars($news_item['title']); ?>"
                          style="max-width: 100%; height: auto; display: block;"
-                         onerror="console.error('Image failed to load: <?php echo $img_url; ?>'); this.style.display='none';">
+                         onerror="console.error('Image failed to load: <?php echo htmlspecialchars($news_item['image']); ?>'); this.style.display='none';">
+                </div>
+                <?php elseif (!empty($news_item['featured_image'])): ?>
+                <div class="article-featured-image">
+                    <img src="<?php echo htmlspecialchars($news_item['featured_image']); ?>" 
+                         alt="<?php echo htmlspecialchars($news_item['title']); ?>"
+                         style="max-width: 100%; height: auto; display: block;"
+                         onerror="console.error('Image failed to load: <?php echo htmlspecialchars($news_item['featured_image']); ?>'); this.style.display='none';">
                 </div>
                 <?php endif; ?>
 
