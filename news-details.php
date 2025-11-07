@@ -2,6 +2,7 @@
 /**
  * News Details Page
  * Displays individual news article by slug or ID
+ * Layout inspired by jnews.io professional news theme
  */
 
 // Start session
@@ -18,37 +19,33 @@ ini_set('log_errors', 1);
 set_time_limit(30);
 ini_set('max_execution_time', 30);
 
-// Find base directory - handle being called from news/ folder or root
+// Find base directory
 $base_dir = __DIR__;
-$config_path = null;
-
-// If called from news/ folder
 if (defined('CALLED_FROM_NEWS_FOLDER')) {
     $base_dir = dirname($base_dir);
 }
 
-// Try multiple paths for config file
+// Load configuration
+$config_path = null;
 $possible_config_paths = [
-    $base_dir . '/config/config.php',  // Standard path
-    dirname(__DIR__) . '/config/config.php',  // If called from subdirectory
-    __DIR__ . '/config/config.php',  // If in root
-    'config/config.php',  // Relative path
-    $_SERVER['DOCUMENT_ROOT'] . '/config/config.php',  // Absolute from document root
+    $base_dir . '/config/config.php',
+    dirname(__DIR__) . '/config/config.php',
+    __DIR__ . '/config/config.php',
+    'config/config.php',
+    $_SERVER['DOCUMENT_ROOT'] . '/config/config.php',
 ];
 
 foreach ($possible_config_paths as $path) {
     if (file_exists($path)) {
         $config_path = $path;
-        $base_dir = dirname(dirname($path));  // Update base_dir based on found config
+        $base_dir = dirname(dirname($path));
         break;
     }
 }
 
-// Load configuration
 if ($config_path && file_exists($config_path)) {
     require_once $config_path;
 } else {
-    // Last attempt: check common locations
     $common_paths = [
         dirname(dirname(__FILE__)) . '/config/config.php',
         realpath(dirname(__FILE__) . '/../config/config.php'),
@@ -75,7 +72,6 @@ if ($config_path && file_exists($config_path)) {
 $db = null;
 $conn = null;
 try {
-    // Try multiple paths for database config
     $possible_db_paths = [
         $base_dir . '/config/database.php',
         dirname($config_path) . '/database.php',
@@ -113,7 +109,6 @@ $news_item = null;
 // Fetch news article
 try {
     if (!empty($news_slug)) {
-        // Try exact match first
         $stmt = $conn->prepare("
             SELECT n.*, COALESCE(u.username, 'Unknown') as author 
             FROM news n 
@@ -124,7 +119,6 @@ try {
         $stmt->execute([$news_slug]);
         $news_item = $stmt->fetch(PDO::FETCH_ASSOC);
         
-        // If not found, try URL decoded version
         if (!$news_item) {
             $decoded_slug = urldecode($news_slug);
             if ($decoded_slug !== $news_slug) {
@@ -133,7 +127,6 @@ try {
             }
         }
         
-        // If still not found, try title search
         if (!$news_item) {
             $title_search = str_replace('-', ' ', $news_slug);
             $stmt = $conn->prepare("
@@ -147,7 +140,6 @@ try {
             $news_item = $stmt->fetch(PDO::FETCH_ASSOC);
         }
     } elseif (!empty($news_id)) {
-        // Get by ID
         $stmt = $conn->prepare("
             SELECT n.*, COALESCE(u.username, 'Unknown') as author 
             FROM news n 
@@ -158,13 +150,12 @@ try {
         $news_item = $stmt->fetch(PDO::FETCH_ASSOC);
     }
     
-    // If not found, redirect to news listing
-if (!$news_item) {
+    if (!$news_item) {
         $news_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/news.php' : '/news.php';
         if (!headers_sent()) {
             header('Location: ' . $news_url);
-    exit;
-                } else {
+            exit;
+        } else {
             echo '<script>window.location.href = "' . htmlspecialchars($news_url) . '";</script>';
             exit;
         }
@@ -174,6 +165,7 @@ if (!$news_item) {
     try {
         $view_stmt = $conn->prepare("UPDATE news SET views = views + 1 WHERE id = ?");
         $view_stmt->execute([$news_item['id']]);
+        $news_item['views'] = ($news_item['views'] ?? 0) + 1;
     } catch (Exception $e) {
         error_log('View count error: ' . $e->getMessage());
     }
@@ -188,17 +180,34 @@ if (!$news_item) {
 $related_news = [];
 try {
     $related_stmt = $conn->prepare("
-            SELECT n.*, COALESCE(u.username, 'Unknown') as author 
-            FROM news n 
-            LEFT JOIN users u ON n.author_id = u.id 
-            WHERE n.category = ? AND n.id != ? AND n.is_published = 1 
-            ORDER BY n.created_at DESC 
-            LIMIT 3
-        ");
+        SELECT n.*, COALESCE(u.username, 'Unknown') as author 
+        FROM news n 
+        LEFT JOIN users u ON n.author_id = u.id 
+        WHERE n.category = ? AND n.id != ? AND n.is_published = 1 
+        ORDER BY n.created_at DESC 
+        LIMIT 4
+    ");
     $related_stmt->execute([$news_item['category'] ?? 'News', $news_item['id']]);
     $related_news = $related_stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     error_log('Error fetching related news: ' . $e->getMessage());
+}
+
+// Get latest news for sidebar
+$latest_news = [];
+try {
+    $latest_stmt = $conn->prepare("
+        SELECT n.*, COALESCE(u.username, 'Unknown') as author 
+        FROM news n 
+        LEFT JOIN users u ON n.author_id = u.id 
+        WHERE n.is_published = 1 AND n.id != ?
+        ORDER BY n.created_at DESC 
+        LIMIT 5
+    ");
+    $latest_stmt->execute([$news_item['id']]);
+    $latest_news = $latest_stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (Exception $e) {
+    error_log('Error fetching latest news: ' . $e->getMessage());
 }
 
 // Helper function for asset paths
@@ -257,7 +266,7 @@ $share_image = !empty($news_item['featured_image'])
     <meta name="twitter:image" content="<?php echo htmlspecialchars($share_image); ?>">
     <?php endif; ?>
     
-    <!-- Font Awesome for icons -->
+    <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="assets/css/luo-style.css" rel="stylesheet">
     
@@ -265,192 +274,390 @@ $share_image = !empty($news_item['featured_image'])
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background: #f5f5f5;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            color: #333;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            color: #222;
             line-height: 1.6;
-            padding-bottom: 120px;
         }
         .main-content {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
-            padding: 25px 20px;
+            padding: 30px 20px;
         }
-        .content-grid {
+        .article-container {
             display: grid;
-            grid-template-columns: 1fr 320px;
-            gap: 24px;
-            margin-top: 24px;
+            grid-template-columns: 1fr 360px;
+            gap: 40px;
+            margin-top: 20px;
         }
-        @media (max-width: 992px) {
-            .content-grid {
+        @media (max-width: 1024px) {
+            .article-container {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+        }
+        .article-main {
+            background: #fff;
+            padding: 0;
+        }
+        .article-header {
+            padding: 40px 40px 30px;
+            border-bottom: 1px solid #eee;
+        }
+        .article-category {
+            display: inline-block;
+            padding: 6px 12px;
+            background: #e74c3c;
+            color: white;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 20px;
+            border-radius: 3px;
+        }
+        .article-title {
+            font-size: 42px;
+            font-weight: 700;
+            line-height: 1.2;
+            color: #222;
+            margin-bottom: 20px;
+        }
+        .article-meta {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 20px;
+            font-size: 14px;
+            color: #666;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        .article-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .article-meta-item i {
+            color: #999;
+        }
+        .article-author {
+            font-weight: 600;
+            color: #222;
+        }
+        .article-featured-image {
+            width: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        .article-featured-image img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        .article-body {
+            padding: 40px;
+            font-size: 18px;
+            line-height: 1.8;
+            color: #333;
+        }
+        .article-body p {
+            margin-bottom: 24px;
+        }
+        .article-body h2 {
+            font-size: 28px;
+            font-weight: 700;
+            margin: 40px 0 20px;
+            color: #222;
+            line-height: 1.3;
+        }
+        .article-body h3 {
+            font-size: 24px;
+            font-weight: 700;
+            margin: 35px 0 18px;
+            color: #222;
+            line-height: 1.3;
+        }
+        .article-body blockquote {
+            border-left: 4px solid #e74c3c;
+            padding: 20px 30px;
+            margin: 30px 0;
+            background: #f9f9f9;
+            font-style: italic;
+            color: #555;
+            font-size: 20px;
+        }
+        .article-body img {
+            max-width: 100%;
+            height: auto;
+            margin: 30px 0;
+            border-radius: 4px;
+        }
+        .article-share {
+            padding: 30px 40px;
+            border-top: 1px solid #eee;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .share-stats {
+            display: flex;
+            gap: 30px;
+            font-size: 14px;
+            color: #666;
+        }
+        .share-stats-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .share-buttons {
+            display: flex;
+            gap: 12px;
+        }
+        .share-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            text-decoration: none;
+            font-size: 18px;
+            transition: transform 0.2s;
+        }
+        .share-btn:hover {
+            transform: translateY(-2px);
+        }
+        .share-btn.facebook { background: #1877f2; }
+        .share-btn.twitter { background: #1da1f2; }
+        .share-btn.whatsapp { background: #25d366; }
+        .author-box {
+            padding: 40px;
+            background: #f9f9f9;
+            border-top: 1px solid #eee;
+        }
+        .author-box-content {
+            display: flex;
+            gap: 25px;
+            align-items: flex-start;
+        }
+        .author-avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: #ddd;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 50px;
+            color: #999;
+        }
+        .author-avatar img {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        .author-info h3 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #222;
+        }
+        .author-info p {
+            font-size: 15px;
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 0;
+        }
+        .related-posts {
+            padding: 40px;
+            border-top: 1px solid #eee;
+        }
+        .related-posts h3 {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 30px;
+            color: #222;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 18px;
+        }
+        .related-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+        }
+        @media (max-width: 768px) {
+            .related-grid {
                 grid-template-columns: 1fr;
             }
         }
-        .post-content {
-            background: #fff;
-            border-radius: 6px;
-            border: 1px solid #eee;
-            padding: 24px;
-        }
-        .post-title {
-            font-size: 30px;
-            font-weight: 800;
-            line-height: 1.3;
-            color: #222;
-            margin: 8px 0 14px;
-        }
-        .post-meta {
+        .related-post-item {
             display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            font-size: 13px;
-            color: #777;
-            border-top: 1px solid #f1f1f1;
-            padding-top: 14px;
+            gap: 15px;
         }
-        .post-meta span {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
+        .related-post-thumb {
+            width: 120px;
+            height: 90px;
+            flex-shrink: 0;
+            border-radius: 4px;
+            overflow: hidden;
+            background: #eee;
         }
-        .post-hero {
-            margin: 18px 0 0;
-        }
-        .post-hero img {
+        .related-post-thumb img {
             width: 100%;
-            height: auto;
-            border-radius: 6px;
-            display: block;
+            height: 100%;
+            object-fit: cover;
         }
-        .post-content .news-body {
+        .related-post-content h4 {
             font-size: 16px;
-            line-height: 1.85;
+            font-weight: 600;
+            line-height: 1.4;
+            margin-bottom: 8px;
+        }
+        .related-post-content h4 a {
             color: #222;
-            margin-top: 20px;
-        }
-        .post-content .news-body p {
-            margin: 0 0 18px;
-        }
-        blockquote {
-            border-left: 3px solid #222;
-            background: #fafafa;
-            padding: 14px 16px;
-            margin: 18px 0;
-            color: #333;
-            font-style: italic;
-        }
-        .post-share {
-            margin-top: 24px;
-            padding-top: 20px;
-            border-top: 1px solid #eee;
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-        .post-share a {
-            width: 40px;
-            height: 40px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: #f5f5f5;
-            border-radius: 50%;
-            color: #555;
             text-decoration: none;
-            transition: all 0.3s;
+            transition: color 0.2s;
         }
-        .post-share a:hover {
-            background: #e9e9e9;
-            transform: translateY(-2px);
+        .related-post-content h4 a:hover {
+            color: #e74c3c;
         }
-        .post-share .facebook { color: #1877f2; }
-        .post-share .twitter { color: #1da1f2; }
-        .post-share .whatsapp { color: #25d366; }
-        .sidebar-sticky {
+        .related-post-meta {
+            font-size: 13px;
+            color: #999;
+        }
+        .sidebar {
             position: sticky;
             top: 20px;
+            align-self: start;
         }
-        @media (max-width: 992px) {
-            .sidebar-sticky {
+        @media (max-width: 1024px) {
+            .sidebar {
                 position: static;
             }
         }
         .sidebar-widget {
             background: #fff;
-            border-radius: 6px;
-            border: 1px solid #eee;
-            padding: 20px;
-            margin-bottom: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            border-radius: 4px;
         }
         .sidebar-widget h3 {
             font-size: 18px;
             font-weight: 700;
-            margin-bottom: 16px;
+            margin-bottom: 25px;
             color: #222;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #eee;
-        }
-        .widget-list .item {
-            display: grid;
-            grid-template-columns: 80px 1fr;
-            gap: 10px;
-            padding: 10px 0;
-            border-bottom: 1px solid #f4f4f4;
-        }
-        .widget-list .item:last-child {
-            border-bottom: none;
-        }
-        .widget-list .thumb {
-            width: 80px;
-            height: 60px;
-            border-radius: 4px;
-            object-fit: cover;
-            background: #e9eef3;
-        }
-        .widget-list .title {
-            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
             font-size: 14px;
-            line-height: 1.4;
-            color: #222;
-            text-decoration: none;
-            display: block;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e74c3c;
         }
-        .widget-list .title:hover {
-            color: #007bff;
+        .widget-post-list {
+            list-style: none;
         }
-        .widget-list .meta {
-            font-size: 12px;
-            color: #888;
-            margin-top: 4px;
-        }
-        .author-box {
+        .widget-post-item {
             display: flex;
-            align-items: flex-start;
-            gap: 20px;
-            padding: 18px;
-            border: 1px solid #eee;
-            border-radius: 6px;
-            background: #fff;
-            margin-top: 24px;
+            gap: 15px;
+            padding-bottom: 20px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
         }
-        .author-box .avatar {
+        .widget-post-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        .widget-post-thumb {
             width: 80px;
             height: 80px;
-            border-radius: 50%;
-            background: #e9eef3;
-            display: inline-block;
             flex-shrink: 0;
+            border-radius: 4px;
+            overflow: hidden;
+            background: #eee;
         }
-        .author-box .name {
-            font-weight: 700;
-            margin-bottom: 6px;
-            font-size: 16px;
-            color: #333;
+        .widget-post-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
-        .author-box .bio {
-            color: #666;
+        .widget-post-content h4 {
             font-size: 14px;
-            line-height: 1.6;
+            font-weight: 600;
+            line-height: 1.4;
+            margin-bottom: 8px;
+        }
+        .widget-post-content h4 a {
+            color: #222;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .widget-post-content h4 a:hover {
+            color: #e74c3c;
+        }
+        .widget-post-meta {
+            font-size: 12px;
+            color: #999;
+        }
+        .article-tags {
+            padding: 30px 40px;
+            border-top: 1px solid #eee;
+        }
+        .article-tags h4 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #222;
+            text-transform: uppercase;
+        }
+        .tags-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .tag {
+            padding: 6px 12px;
+            background: #f5f5f5;
+            color: #666;
+            font-size: 13px;
+            border-radius: 3px;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .tag:hover {
+            background: #e74c3c;
+            color: white;
+        }
+        @media (max-width: 768px) {
+            .article-header,
+            .article-body,
+            .article-share,
+            .author-box,
+            .related-posts,
+            .article-tags {
+                padding-left: 20px;
+                padding-right: 20px;
+            }
+            .article-title {
+                font-size: 28px;
+            }
+            .article-body {
+                font-size: 16px;
+            }
+            .share-stats {
+                width: 100%;
+            }
+            .share-buttons {
+                width: 100%;
+                justify-content: flex-start;
+            }
         }
     </style>
 </head>
@@ -468,10 +675,7 @@ $share_image = !empty($news_item['featured_image'])
             }
             include $header_path;
         } else {
-            // Minimal header if header.php doesn't exist
-            echo '<div style="padding: 20px; background: #333; color: white;">';
-            echo '<a href="index.php" style="color: white; text-decoration: none;">' . htmlspecialchars(defined('SITE_NAME') ? SITE_NAME : 'Home') . '</a>';
-            echo '</div>';
+            echo '<div style="padding: 20px; background: #333; color: white;"><a href="index.php" style="color: white; text-decoration: none;">' . htmlspecialchars(defined('SITE_NAME') ? SITE_NAME : 'Home') . '</a></div>';
         }
     } catch (Exception $e) {
         error_log('Error including header.php: ' . $e->getMessage());
@@ -483,84 +687,159 @@ $share_image = !empty($news_item['featured_image'])
     ?>
     
     <div class="main-content">
-        <div class="content-grid">
-            <div class="post-content">
-                <h1 class="post-title"><?php echo htmlspecialchars($news_item['title']); ?></h1>
-                
-                <div class="post-meta">
-                    <span><i class="fas fa-user"></i> <?php echo htmlspecialchars($news_item['author'] ?? 'Unknown'); ?></span>
-                    <span><i class="fas fa-calendar"></i> <?php echo date('F j, Y', strtotime($news_item['created_at'])); ?></span>
+        <div class="article-container">
+            <article class="article-main">
+                <div class="article-header">
                     <?php if (!empty($news_item['category'])): ?>
-                    <span><i class="fas fa-tag"></i> <?php echo htmlspecialchars($news_item['category']); ?></span>
+                    <span class="article-category"><?php echo htmlspecialchars($news_item['category']); ?></span>
                     <?php endif; ?>
-                    <span><i class="fas fa-eye"></i> <?php echo number_format($news_item['views'] ?? 0); ?> views</span>
+                    
+                    <h1 class="article-title"><?php echo htmlspecialchars($news_item['title']); ?></h1>
+                    
+                    <div class="article-meta">
+                        <div class="article-meta-item">
+                            <i class="fas fa-user"></i>
+                            <span class="article-author"><?php echo htmlspecialchars($news_item['author'] ?? 'Unknown'); ?></span>
+                        </div>
+                        <div class="article-meta-item">
+                            <i class="far fa-calendar"></i>
+                            <span><?php echo date('F j, Y', strtotime($news_item['created_at'])); ?></span>
+                        </div>
+                        <div class="article-meta-item">
+                            <i class="far fa-eye"></i>
+                            <span><?php echo number_format($news_item['views'] ?? 0); ?> Views</span>
+                        </div>
+                    </div>
                 </div>
 
                 <?php if (!empty($news_item['featured_image'])): ?>
-                <div class="post-hero">
+                <div class="article-featured-image">
                     <img src="<?php echo htmlspecialchars(asset_path($news_item['featured_image'])); ?>" 
                          alt="<?php echo htmlspecialchars($news_item['title']); ?>">
                 </div>
                 <?php endif; ?>
-                
-                <div class="news-body">
+
+                <div class="article-body">
                     <?php echo $news_item['content']; ?>
                 </div>
 
-                <div class="post-share">
-                    <span style="font-weight: 600; color: #555;">Share:</span>
-                    <a href="https://www.facebook.com/sharer/sharer.php?u=<?php echo urlencode($current_url); ?>" 
-                       target="_blank" class="facebook" title="Share on Facebook">
-                        <i class="fab fa-facebook-f"></i>
-                    </a>
-                    <a href="https://twitter.com/intent/tweet?url=<?php echo urlencode($current_url); ?>&text=<?php echo urlencode($share_title); ?>" 
-                       target="_blank" class="twitter" title="Share on Twitter">
-                        <i class="fab fa-twitter"></i>
-                    </a>
-                    <a href="https://wa.me/?text=<?php echo urlencode($share_title . ' ' . $current_url); ?>" 
-                       target="_blank" class="whatsapp" title="Share on WhatsApp">
-                        <i class="fab fa-whatsapp"></i>
-                    </a>
+                <div class="article-share">
+                    <div class="share-stats">
+                        <div class="share-stats-item">
+                            <i class="fas fa-share"></i>
+                            <span><?php echo number_format($news_item['views'] ?? 0); ?> SHARES</span>
+                        </div>
+                        <div class="share-stats-item">
+                            <i class="far fa-eye"></i>
+                            <span><?php echo number_format($news_item['views'] ?? 0); ?> VIEWS</span>
+                        </div>
+                    </div>
+                    <div class="share-buttons">
+                        <a href="https://www.facebook.com/sharer/sharer.php?u=<?php echo urlencode($current_url); ?>" 
+                           target="_blank" class="share-btn facebook" title="Share on Facebook">
+                            <i class="fab fa-facebook-f"></i>
+                        </a>
+                        <a href="https://twitter.com/intent/tweet?url=<?php echo urlencode($current_url); ?>&text=<?php echo urlencode($share_title); ?>" 
+                           target="_blank" class="share-btn twitter" title="Share on Twitter">
+                            <i class="fab fa-twitter"></i>
+                        </a>
+                        <a href="https://wa.me/?text=<?php echo urlencode($share_title . ' ' . $current_url); ?>" 
+                           target="_blank" class="share-btn whatsapp" title="Share on WhatsApp">
+                            <i class="fab fa-whatsapp"></i>
+                        </a>
+                    </div>
                 </div>
+
+                <?php if (!empty($news_item['category'])): ?>
+                <div class="article-tags">
+                    <h4>Tags</h4>
+                    <div class="tags-list">
+                        <a href="news.php?category=<?php echo urlencode($news_item['category']); ?>" class="tag">
+                            <?php echo htmlspecialchars($news_item['category']); ?>
+                        </a>
+                    </div>
+                </div>
+                <?php endif; ?>
 
                 <div class="author-box">
-                    <div class="avatar">
-                        <i class="fas fa-user-circle" style="font-size: 80px; color: #ccc;"></i>
-                    </div>
-                    <div>
-                        <div class="name"><?php echo htmlspecialchars($news_item['author'] ?? 'Unknown'); ?></div>
-                        <div class="bio">Author of this article</div>
+                    <div class="author-box-content">
+                        <div class="author-avatar">
+                            <i class="fas fa-user-circle"></i>
+                        </div>
+                        <div class="author-info">
+                            <h3><?php echo htmlspecialchars($news_item['author'] ?? 'Unknown'); ?></h3>
+                            <p>Author of this article. Share a little biographical information to fill out your profile. This may be shown publicly.</p>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="sidebar-sticky">
                 <?php if (!empty($related_news)): ?>
-                <div class="sidebar-widget">
-                    <h3>Related News</h3>
-                    <div class="widget-list">
+                <div class="related-posts">
+                    <h3>Related Posts</h3>
+                    <div class="related-grid">
                         <?php foreach ($related_news as $related): ?>
-                        <div class="item">
+                        <div class="related-post-item">
                             <?php if (!empty($related['featured_image']) || !empty($related['image'])): ?>
-                            <img src="<?php echo htmlspecialchars(asset_path($related['featured_image'] ?? $related['image'])); ?>" 
-                                 alt="<?php echo htmlspecialchars($related['title']); ?>" 
-                                 class="thumb">
+                            <div class="related-post-thumb">
+                                <a href="<?php echo !empty($related['slug']) ? 'news-details.php?slug=' . urlencode($related['slug']) : 'news-details.php?id=' . $related['id']; ?>">
+                                    <img src="<?php echo htmlspecialchars(asset_path($related['featured_image'] ?? $related['image'])); ?>" 
+                                         alt="<?php echo htmlspecialchars($related['title']); ?>">
+                                </a>
+                            </div>
                             <?php else: ?>
-                            <div class="thumb" style="display: flex; align-items: center; justify-content: center; color: #999;">
-                                <i class="fas fa-newspaper"></i>
+                            <div class="related-post-thumb" style="display: flex; align-items: center; justify-content: center; color: #ccc;">
+                                <i class="fas fa-newspaper" style="font-size: 30px;"></i>
                             </div>
                             <?php endif; ?>
-                            <div>
-                                <a href="<?php echo !empty($related['slug']) ? 'news-details.php?slug=' . urlencode($related['slug']) : 'news-details.php?id=' . $related['id']; ?>" class="title">
-                                    <?php echo htmlspecialchars($related['title']); ?>
-                                </a>
-                                <div class="meta">
+                            <div class="related-post-content">
+                                <h4>
+                                    <a href="<?php echo !empty($related['slug']) ? 'news-details.php?slug=' . urlencode($related['slug']) : 'news-details.php?id=' . $related['id']; ?>">
+                                        <?php echo htmlspecialchars($related['title']); ?>
+                                    </a>
+                                </h4>
+                                <div class="related-post-meta">
                                     <i class="far fa-calendar"></i> <?php echo date('M j, Y', strtotime($related['created_at'])); ?>
                                 </div>
                             </div>
                         </div>
                         <?php endforeach; ?>
                     </div>
+                </div>
+                <?php endif; ?>
+            </article>
+
+            <aside class="sidebar">
+                <?php if (!empty($latest_news)): ?>
+                <div class="sidebar-widget">
+                    <h3>Recent News</h3>
+                    <ul class="widget-post-list">
+                        <?php foreach ($latest_news as $latest): ?>
+                        <li class="widget-post-item">
+                            <?php if (!empty($latest['featured_image']) || !empty($latest['image'])): ?>
+                            <div class="widget-post-thumb">
+                                <a href="<?php echo !empty($latest['slug']) ? 'news-details.php?slug=' . urlencode($latest['slug']) : 'news-details.php?id=' . $latest['id']; ?>">
+                                    <img src="<?php echo htmlspecialchars(asset_path($latest['featured_image'] ?? $latest['image'])); ?>" 
+                                         alt="<?php echo htmlspecialchars($latest['title']); ?>">
+                                </a>
+                            </div>
+                            <?php else: ?>
+                            <div class="widget-post-thumb" style="display: flex; align-items: center; justify-content: center; color: #ccc;">
+                                <i class="fas fa-newspaper"></i>
+                            </div>
+                            <?php endif; ?>
+                            <div class="widget-post-content">
+                                <h4>
+                                    <a href="<?php echo !empty($latest['slug']) ? 'news-details.php?slug=' . urlencode($latest['slug']) : 'news-details.php?id=' . $latest['id']; ?>">
+                                        <?php echo htmlspecialchars($latest['title']); ?>
+                                    </a>
+                                </h4>
+                                <div class="widget-post-meta">
+                                    <i class="far fa-calendar"></i> <?php echo date('M j, Y', strtotime($latest['created_at'])); ?>
+                                </div>
+                            </div>
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
                 </div>
                 <?php endif; ?>
 
@@ -579,7 +858,7 @@ $share_image = !empty($news_item['featured_image'])
                     // Ignore ad errors
                 }
                 ?>
-            </div>
+            </aside>
         </div>
     </div>
 
