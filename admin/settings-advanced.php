@@ -151,6 +151,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $success = 'Legal pages saved successfully!';
                 break;
+                
+            case 'version_management':
+                $new_version = trim($_POST['script_version'] ?? '');
+                
+                if (empty($new_version)) {
+                    $error = 'Version cannot be empty.';
+                } else {
+                    // Validate version format (e.g., 1.0, 1.0.1, 2.0.0)
+                    if (!preg_match('/^\d+\.\d+(\.\d+)?$/', $new_version)) {
+                        $error = 'Invalid version format. Use format like: 1.0, 1.0.1, or 2.0.0';
+                    } else {
+                        // Update version in database
+                        saveSetting('script_version', $new_version);
+                        
+                        // Also update config/version.php if writable
+                        $version_file = __DIR__ . '/../config/version.php';
+                        if (file_exists($version_file) && is_writable($version_file)) {
+                            $version_content = "<?php\n// config/version.php\n// Script Version Definition\n\n// Current script version\n// This will be updated automatically during installation\nif (!defined('SCRIPT_VERSION')) {\n    define('SCRIPT_VERSION', '" . addslashes($new_version) . "');\n}\n\n";
+                            file_put_contents($version_file, $version_content);
+                        }
+                        
+                        $success = 'Script version updated successfully to ' . htmlspecialchars($new_version) . '!';
+                    }
+                }
+                break;
         }
     } catch (Exception $e) {
         $error = 'Error: ' . $e->getMessage();
@@ -230,6 +255,7 @@ $current_settings = [
     'facebook_pixel' => getSetting('facebook_pixel', ''),
     'terms_of_service' => getSetting('terms_of_service', ''),
     'privacy_policy' => getSetting('privacy_policy', ''),
+    'script_version' => getSetting('script_version', defined('SCRIPT_VERSION') ? SCRIPT_VERSION : '1.0'),
 ];
 
 $page_title = 'Advanced Settings';
@@ -364,6 +390,9 @@ include 'includes/header.php';
     </button>
     <button class="tab-btn" onclick="switchTab('legal')">
         <i class="fas fa-gavel"></i> Legal Pages
+    </button>
+    <button class="tab-btn" onclick="switchTab('version')">
+        <i class="fas fa-code-branch"></i> Version Management
     </button>
 </div>
 
@@ -838,6 +867,78 @@ include 'includes/header.php';
                 <button type="submit" class="btn btn-primary">
                     <i class="fas fa-save"></i> Save Legal Pages
                 </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Version Management Tab -->
+<div id="version" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <h2>Script Version Management</h2>
+        </div>
+        <div class="card-body">
+            <div class="alert alert-info" style="margin-bottom: 30px;">
+                <i class="fas fa-info-circle"></i> 
+                <strong>How Version Management Works:</strong>
+                <ul style="margin: 10px 0 0 20px; padding: 0;">
+                    <li>The script version is stored in the database (<code>settings</code> table) and in <code>config/version.php</code></li>
+                    <li>The system checks the database first, then falls back to the constant in <code>config/version.php</code></li>
+                    <li>When you install updates from the server, the version is automatically updated</li>
+                    <li>You can manually change the version here if needed (e.g., to test updates or rollback)</li>
+                    <li>The update server uses this version to determine which updates are available</li>
+                </ul>
+            </div>
+            
+            <form method="POST">
+                <input type="hidden" name="action" value="version_management">
+                
+                <div class="setting-row">
+                    <div>
+                        <div class="setting-label">Current Script Version</div>
+                        <div class="setting-description">
+                            The current version of your script. This is used by the update system to check for available updates.
+                            <br><strong>Format:</strong> Use semantic versioning like 1.0, 1.0.1, 1.1.0, or 2.0.0
+                        </div>
+                    </div>
+                    <div>
+                        <input type="text" name="script_version" class="form-control" 
+                               value="<?php echo htmlspecialchars($current_settings['script_version']); ?>" 
+                               placeholder="1.0" 
+                               pattern="^\d+\.\d+(\.\d+)?$"
+                               style="font-size: 18px; font-weight: 600; max-width: 200px;">
+                        <div style="margin-top: 10px; font-size: 13px; color: #6b7280;">
+                            <i class="fas fa-database"></i> Database: 
+                            <code><?php 
+                                try {
+                                    $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'script_version'");
+                                    $stmt->execute();
+                                    $result = $stmt->fetch(PDO::FETCH_ASSOC);
+                                    echo htmlspecialchars($result['setting_value'] ?? 'Not set');
+                                } catch (Exception $e) {
+                                    echo 'Error reading';
+                                }
+                            ?></code>
+                            <br>
+                            <i class="fas fa-file-code"></i> Config File: 
+                            <code><?php echo defined('SCRIPT_VERSION') ? SCRIPT_VERSION : 'Not defined'; ?></code>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-warning" style="margin: 20px 0;">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    <strong>Warning:</strong> Changing the version manually may affect update detection. 
+                    Only change this if you know what you're doing. The version is automatically updated when you install updates from the server.
+                </div>
+                
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Update Version
+                </button>
+                <a href="check-updates.php" class="btn btn-secondary" style="margin-left: 10px;">
+                    <i class="fas fa-sync"></i> Check for Updates
+                </a>
             </form>
         </div>
     </div>
