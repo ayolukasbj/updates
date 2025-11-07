@@ -7,7 +7,24 @@ $config_path = __DIR__ . '/../config/config.php';
 if (!file_exists($config_path)) {
     $config_path = 'config/config.php';
 }
+if (!file_exists($config_path)) {
+    // Try absolute path
+    $config_path = $_SERVER['DOCUMENT_ROOT'] . '/config/config.php';
+}
 require_once $config_path;
+
+// Ensure sanitize_input function exists
+if (!function_exists('sanitize_input')) {
+    function sanitize_input($data) {
+        if (is_null($data)) {
+            return '';
+        }
+        $data = trim($data);
+        $data = stripslashes($data);
+        $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
+        return $data;
+    }
+}
 
 $db_path = __DIR__ . '/../config/database.php';
 if (!file_exists($db_path)) {

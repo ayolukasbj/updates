@@ -257,7 +257,8 @@ $share_image = !empty($news_item['featured_image'])
     <meta name="twitter:image" content="<?php echo htmlspecialchars($share_image); ?>">
     <?php endif; ?>
     
-    <!-- Styles will be included via header.php in body -->
+    <!-- Font Awesome for icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -564,7 +565,7 @@ $share_image = !empty($news_item['featured_image'])
                             </div>
                             <?php endif; ?>
                             <div>
-                                <a href="news-details.php?slug=<?php echo urlencode($related['slug']); ?>" class="title">
+                                <a href="<?php echo !empty($related['slug']) ? 'news-details.php?slug=' . urlencode($related['slug']) : 'news-details.php?id=' . $related['id']; ?>" class="title">
                                     <?php echo htmlspecialchars($related['title']); ?>
                                 </a>
                                 <div class="meta">
