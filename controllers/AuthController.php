@@ -329,8 +329,8 @@ class AuthController {
                             ob_end_clean();
                         }
                         
-                        // Redirect to dashboard
-                        $redirect_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/dashboard.php' : '/dashboard.php';
+                        // Redirect to artist profile mobile page
+                        $redirect_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') . '/artist-profile-mobile.php' : '/artist-profile-mobile.php';
                         if (!headers_sent()) {
                             header('Location: ' . $redirect_url, true, 302);
                             exit;
