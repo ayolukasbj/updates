@@ -490,6 +490,7 @@ class AuthController {
         $errors = [];
         
         // Check terms and privacy policy agreement
+        // Checkbox sends "1" when checked (we set value="1" in the form)
         if (empty($_POST['terms']) || $_POST['terms'] !== '1') {
             $errors[] = 'You must agree to the Terms of Service and Privacy Policy to register.';
         }
