@@ -2,9 +2,24 @@
 // controllers/AuthController.php
 // Authentication controller for login, register, and password management
 
-require_once 'config/config.php';
-require_once 'config/database.php';
-require_once 'classes/User.php';
+// Load config with proper path resolution
+$config_path = __DIR__ . '/../config/config.php';
+if (!file_exists($config_path)) {
+    $config_path = 'config/config.php';
+}
+require_once $config_path;
+
+$db_path = __DIR__ . '/../config/database.php';
+if (!file_exists($db_path)) {
+    $db_path = 'config/database.php';
+}
+require_once $db_path;
+
+$user_class_path = __DIR__ . '/../classes/User.php';
+if (!file_exists($user_class_path)) {
+    $user_class_path = 'classes/User.php';
+}
+require_once $user_class_path;
 
 // Load email helper if it exists
 if (file_exists(__DIR__ . '/../helpers/EmailHelper.php')) {
