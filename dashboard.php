@@ -27,13 +27,16 @@ try {
     if (!file_exists('config/database.php')) {
         throw new Exception('Database config not found');
     }
-require_once 'config/database.php';
-$db = new Database();
-$conn = $db->getConnection();
+    require_once 'config/database.php';
+    $db = new Database();
+    $conn = $db->getConnection();
 
     if (!$conn) {
         throw new Exception('Database connection failed');
     }
+    
+    // Make connection available globally for is_user_verified() function
+    $GLOBALS['conn'] = $conn;
 } catch (Exception $e) {
     error_log('Database error in dashboard.php: ' . $e->getMessage());
     http_response_code(500);
@@ -41,7 +44,25 @@ $conn = $db->getConnection();
 }
 
 // Check if user is logged in and verified
-require_login();
+try {
+    require_login();
+} catch (Exception $e) {
+    error_log('Dashboard require_login error: ' . $e->getMessage());
+    error_log('Stack trace: ' . $e->getTraceAsString());
+    // Fallback: just check if user is logged in
+    if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+        header('Location: login.php');
+        exit;
+    }
+} catch (Error $e) {
+    error_log('Dashboard require_login fatal error: ' . $e->getMessage());
+    error_log('Stack trace: ' . $e->getTraceAsString());
+    // Fallback: just check if user is logged in
+    if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+        header('Location: login.php');
+        exit;
+    }
+}
 
 $user_id = $_SESSION['user_id'];
 
