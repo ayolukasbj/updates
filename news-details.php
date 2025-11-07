@@ -432,6 +432,7 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             max-width: 1200px;
             margin: 0 auto;
             padding: 30px 20px;
+            overflow-x: hidden;
         }
         .article-container {
             display: grid;
@@ -447,6 +448,13 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
         }
         .article-main {
             background: #fff;
+            padding: 40px;
+            overflow-x: hidden;
+        }
+        @media (max-width: 768px) {
+            .article-main {
+                padding: 20px;
+            }
         }
         
         /* Share Stats Bar at Top */
@@ -496,7 +504,8 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
         
         /* Article Header */
         .article-header {
-            padding: 0 0 30px;
+            padding: 0;
+            margin-bottom: 30px;
         }
         .article-category {
             display: inline-block;
@@ -577,11 +586,13 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
         .article-featured-image {
             width: 100%;
             margin: 30px 0;
+            padding: 0;
         }
         .article-featured-image img {
             width: 100%;
             height: auto;
             display: block;
+            border-radius: 4px;
         }
         
         /* Article Body */
@@ -590,12 +601,9 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             line-height: 1.85;
             color: #333;
             margin: 30px 0;
-            padding: 0 40px;
-        }
-        @media (max-width: 768px) {
-            .article-body {
-                padding: 0 20px;
-            }
+            padding: 0;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
         }
         .article-body p {
             margin-bottom: 24px;
@@ -1244,11 +1252,21 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     $featured_img = $news_item['image'];
                 }
                 
-                if (!empty($featured_img)): ?>
+                // Clean up the image path
+                if (!empty($featured_img)) {
+                    $featured_img = trim($featured_img);
+                    // Remove any leading slashes or dots
+                    $featured_img = ltrim($featured_img, './');
+                }
+                
+                if (!empty($featured_img)): 
+                    $img_url = asset_path($featured_img);
+                ?>
                 <div class="article-featured-image">
-                    <img src="<?php echo htmlspecialchars(asset_path($featured_img)); ?>" 
+                    <img src="<?php echo htmlspecialchars($img_url); ?>" 
                          alt="<?php echo htmlspecialchars($news_item['title']); ?>"
-                         onerror="this.style.display='none';">
+                         style="max-width: 100%; height: auto; display: block;"
+                         onerror="console.error('Image failed to load: <?php echo htmlspecialchars($img_url); ?>'); this.style.display='none';">
                 </div>
                 <?php endif; ?>
 

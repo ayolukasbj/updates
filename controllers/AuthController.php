@@ -273,22 +273,37 @@ class AuthController {
             $errors[] = 'Username is required.';
         } elseif (strlen($data['username']) < 3) {
             $errors[] = 'Username must be at least 3 characters long.';
-        } elseif ($this->user->usernameExists($data['username'])) {
-            $errors[] = 'Username already exists.';
+        } else {
+            try {
+                if (method_exists($this->user, 'usernameExists') && $this->user->usernameExists($data['username'])) {
+                    $errors[] = 'Username already exists.';
+                }
+            } catch (Exception $e) {
+                error_log('Error checking username: ' . $e->getMessage());
+            }
         }
         
         if (empty($data['email'])) {
             $errors[] = 'Email is required.';
         } elseif (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
             $errors[] = 'Invalid email format.';
-        } elseif ($this->user->emailExists($data['email'])) {
-            $errors[] = 'Email already exists.';
+        } else {
+            try {
+                if (method_exists($this->user, 'emailExists') && $this->user->emailExists($data['email'])) {
+                    $errors[] = 'Email already exists.';
+                }
+            } catch (Exception $e) {
+                error_log('Error checking email: ' . $e->getMessage());
+            }
         }
         
         if (empty($data['password'])) {
             $errors[] = 'Password is required.';
-        } elseif (strlen($data['password']) < PASSWORD_MIN_LENGTH) {
-            $errors[] = 'Password must be at least ' . PASSWORD_MIN_LENGTH . ' characters long.';
+        } else {
+            $min_length = defined('PASSWORD_MIN_LENGTH') ? PASSWORD_MIN_LENGTH : 6;
+            if (strlen($data['password']) < $min_length) {
+                $errors[] = 'Password must be at least ' . $min_length . ' characters long.';
+            }
         }
         
         if ($data['password'] !== $data['confirm_password']) {
