@@ -895,7 +895,34 @@ if (!function_exists('asset_path')) {
     $shareUrl = SITE_URL . '/song/' . urlencode($shareSlug);
     $shareTitle = htmlspecialchars($song['title'] . ' - ' . ($display_artist_name ?? $song['artist'] ?? 'Unknown Artist'));
     $shareDescription = !empty($song['share_excerpt']) ? htmlspecialchars($song['share_excerpt']) : (!empty($song['description']) ? htmlspecialchars(strip_tags(substr($song['description'], 0, 200))) : htmlspecialchars('Listen to ' . $song['title'] . ' by ' . ($display_artist_name ?? $song['artist'] ?? 'Unknown Artist') . ' on ' . SITE_NAME));
-    $shareImage = !empty($song['cover_art']) ? asset_path($song['cover_art']) : (defined('SITE_URL') ? SITE_URL . '/assets/images/default-cover.jpg' : '');
+    
+    // Get share image - use cover art first, then artist profile image, then default
+    $shareImage = '';
+    if (!empty($song['cover_art'])) {
+        $shareImage = asset_path($song['cover_art']);
+    } else {
+        // Try to get artist profile image from uploaded_by user
+        $artist_avatar = '';
+        if (!empty($song['uploaded_by']) && isset($conn)) {
+            try {
+                $avatarStmt = $conn->prepare("SELECT avatar FROM users WHERE id = ? LIMIT 1");
+                $avatarStmt->execute([$song['uploaded_by']]);
+                $avatarResult = $avatarStmt->fetch(PDO::FETCH_ASSOC);
+                if ($avatarResult && !empty($avatarResult['avatar'])) {
+                    $artist_avatar = $avatarResult['avatar'];
+                }
+            } catch (Exception $e) {
+                error_log("Error fetching artist avatar for share image: " . $e->getMessage());
+            }
+        }
+        
+        if (!empty($artist_avatar)) {
+            $shareImage = asset_path($artist_avatar);
+        } else {
+            // Fallback to default cover
+            $shareImage = defined('SITE_URL') ? SITE_URL . '/assets/images/default-cover.jpg' : '';
+        }
+    }
     ?>
     
     <!-- Open Graph / Facebook -->

@@ -1030,7 +1030,7 @@ try {
             <div class="site-name"><?php echo SITE_NAME; ?></div>
         </div>
         <div class="header-right">
-            <a href="profile.php">Account</a>
+            <a href="index.php">Homepage</a>
             <span>|</span>
             <a href="logout.php">Log out</a>
         </div>

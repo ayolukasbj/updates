@@ -181,12 +181,6 @@ include 'includes/header.php';
                 <i class="fas fa-magic"></i> Install Update Automatically
             </button>
         </form>
-        <a href="<?php echo htmlspecialchars($update_info['download_url']); ?>" 
-           target="_blank" 
-           class="btn btn-secondary" 
-           style="display: inline-block; padding: 12px 24px; background: #6b7280; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; margin-left: 10px;">
-            <i class="fas fa-download"></i> Download Manually
-        </a>
     </div>
     <?php else: ?>
     <p style="color: #666; margin-top: 15px;">
