@@ -31,11 +31,24 @@ function displayAd($position) {
     
     switch ($ad['type']) {
         case 'code':
-            // Output raw HTML/JS code - don't escape script tags
-            // For AdSense and other script-based ads, we need to output raw HTML
+            // Output raw HTML/JS code - CRITICAL: Do not escape or modify
+            // AdSense scripts MUST be output exactly as stored in database
             $ad_content = $ad['content'];
-            // Return raw HTML without wrapper (wrapper will be added in insertAdsInContent if needed)
-            // This allows script tags to execute properly
+            
+            // Remove any PHP tags that might have been accidentally saved
+            $ad_content = str_replace(['<?php', '<?', '?>'], '', $ad_content);
+            
+            // For AdSense: Remove the head script tag if present (it should be in head, not body)
+            // The head script will be extracted separately and added to <head>
+            // We only want the body ad unit code here
+            if (preg_match('/<script[^>]*src=["\'][^"\']*pagead2\.googlesyndication\.com[^"\']*["\'][^>]*><\/script>/i', $ad_content)) {
+                // Remove the head script tag from body content
+                $ad_content = preg_replace('/<script[^>]*src=["\'][^"\']*pagead2\.googlesyndication\.com[^"\']*["\'][^>]*><\/script>/i', '', $ad_content);
+                $ad_content = trim($ad_content);
+            }
+            
+            // Return raw HTML - scripts will execute when output to page
+            // The ad content is stored in database and should contain valid HTML/JS
             return $ad_content;
             break;
             

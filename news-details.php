@@ -387,11 +387,20 @@ function insertAdsInContent($content, $adCode) {
         return $content;
     }
     
-    // Wrap ad code in a container div for styling
-    $wrappedAd = '<div class="in-article-ad" style="margin: 30px auto; text-align: center; padding: 20px; background: #f9f9f9; border-radius: 4px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden;">' . $adCode . '</div>';
+    // Clean ad code - remove head script if present (handled separately in <head>)
+    $cleanAdCode = $adCode;
+    // Remove AdSense head script tag (it goes in <head>, not body)
+    $cleanAdCode = preg_replace('/<script[^>]*src=["\'][^"\']*pagead2\.googlesyndication\.com[^"\']*["\'][^>]*><\/script>/i', '', $cleanAdCode);
+    $cleanAdCode = trim($cleanAdCode);
     
-    // Split content by paragraph tags - handle both <p> and <p ...>
-    // Use a more robust regex to catch all paragraph endings
+    if (empty($cleanAdCode)) {
+        return $content;
+    }
+    
+    // Wrap ad code in container - OUTPUT RAW HTML (no escaping)
+    $wrappedAd = '<div class="in-article-ad" style="margin: 30px auto; text-align: center; padding: 20px; background: #f9f9f9; border-radius: 4px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: visible; min-height: 100px;">' . $cleanAdCode . '</div>';
+    
+    // Split content by paragraph tags
     $paragraphs = preg_split('/(<\/p\s*>)/i', $content, -1, PREG_SPLIT_DELIM_CAPTURE);
     
     $result = '';
@@ -401,32 +410,20 @@ function insertAdsInContent($content, $adCode) {
     foreach ($paragraphs as $index => $part) {
         $result .= $part;
         
-        // Check if this is a closing </p> tag (case insensitive)
+        // Check if this is a closing </p> tag
         if (preg_match('/<\/p\s*>/i', $part)) {
             $paragraphCount++;
             
             // Insert ad after every 4 paragraphs (after 4th, 8th, 12th, etc.)
-            // Don't insert after the last paragraph
             if ($paragraphCount % 4 == 0 && $index < $totalParts - 2) {
                 $result .= $wrappedAd;
             }
         }
     }
     
-    // If no paragraphs were found, try splitting by double line breaks
+    // If no paragraphs found, don't insert ads
     if ($paragraphCount == 0) {
-        $lines = preg_split('/(\n\s*\n)/', $content, -1, PREG_SPLIT_DELIM_CAPTURE);
-        $lineCount = 0;
-        $result = '';
-        foreach ($lines as $idx => $line) {
-            $result .= $line;
-            if (preg_match('/\n\s*\n/', $line)) {
-                $lineCount++;
-                if ($lineCount % 4 == 0 && $idx < count($lines) - 2) {
-                    $result .= $wrappedAd;
-                }
-            }
-        }
+        return $content;
     }
     
     return $result;
@@ -544,6 +541,21 @@ if (!function_exists('displayAd')) {
     }
 }
 
+// Extract AdSense head script if present in ad code
+$adsense_head_script = '';
+if (function_exists('getAdsByPosition')) {
+    $ad = getAdsByPosition('news_in_article');
+    if ($ad && $ad['type'] === 'code' && !empty($ad['content'])) {
+        // Check if ad content contains AdSense script tag
+        if (preg_match('/<script[^>]*src=["\']([^"\']*pagead2\.googlesyndication\.com[^"\']*)["\'][^>]*><\/script>/i', $ad['content'], $matches)) {
+            // Extract the script tag for head
+            if (preg_match('/<script[^>]*src=["\'][^"\']*pagead2\.googlesyndication\.com[^"\']*["\'][^>]*><\/script>/i', $ad['content'], $script_matches)) {
+                $adsense_head_script = $script_matches[0];
+            }
+        }
+    }
+}
+
 // Check if user is logged in
 $is_logged_in = false;
 $user_id = null;
@@ -619,20 +631,32 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="assets/css/luo-style.css" rel="stylesheet">
     
+    <?php 
+    // Output AdSense head script if found in ad code
+    if (!empty($adsense_head_script)) {
+        echo $adsense_head_script . "\n    ";
+    }
+    ?>
+    
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html {
-            width: 100%;
-            overflow-x: hidden;
+            width: 100% !important;
+            max-width: 100vw !important;
+            overflow-x: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
         body {
             background: #fff;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             color: #222;
             line-height: 1.6;
-            width: 100%;
-            max-width: 100%;
-            overflow-x: hidden;
+            width: 100% !important;
+            max-width: 100vw !important;
+            overflow-x: hidden !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
         img, video, iframe {
             max-width: 100%;
@@ -641,21 +665,25 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
         .main-content {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 30px 20px;
+            padding: 30px 30px;
             overflow-x: hidden;
             width: 100%;
             box-sizing: border-box;
         }
         @media (max-width: 768px) {
             .main-content {
-                padding: 15px 15px;
-                width: 100%;
-                max-width: 100%;
+                padding: 15px 15px !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
             }
         }
         @media (max-width: 480px) {
             .main-content {
-                padding: 10px 10px;
+                padding: 10px 10px !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
             }
         }
         .article-container {
@@ -665,22 +693,31 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             margin-top: 20px;
             width: 100%;
             box-sizing: border-box;
+            padding: 0 !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
         }
         @media (max-width: 1024px) {
             .article-container {
                 grid-template-columns: 1fr;
                 gap: 30px;
-                width: 100%;
+                width: 100% !important;
+                padding: 0 !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
             }
         }
         .article-main {
             background: #fff;
-            padding: 40px;
+            padding: 40px 30px;
             overflow-x: hidden;
             width: 100%;
+            max-width: 100%;
             box-sizing: border-box;
             word-wrap: break-word;
             overflow-wrap: break-word;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
         }
         @media (max-width: 768px) {
             .article-main {
@@ -695,6 +732,7 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
         @media (max-width: 480px) {
             .article-main {
                 padding: 10px 10px !important;
+                margin: 0 !important;
                 margin-left: 0 !important;
                 margin-right: 0 !important;
             }
@@ -893,8 +931,11 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 font-size: 16px;
                 line-height: 1.7;
                 margin: 20px 0;
-                padding: 0;
-                width: 100%;
+                padding: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
             }
         }
         .article-body p {
@@ -903,10 +944,19 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             max-width: 100%;
             word-wrap: break-word;
             overflow-wrap: break-word;
+            box-sizing: border-box;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
         }
         @media (max-width: 768px) {
             .article-body p {
                 margin-bottom: 18px;
+                padding-left: 0 !important;
+                padding-right: 0 !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
             }
         }
         .article-body h2 {
@@ -959,9 +1009,14 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
         }
         @media (max-width: 768px) {
             .article-body blockquote {
-                padding: 15px 20px;
-                margin: 20px 0;
+                padding: 15px 15px !important;
+                margin: 20px 0 !important;
                 font-size: 18px;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
             }
         }
         .article-body img {
@@ -1516,25 +1571,77 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             }
         }
         
-        /* Critical mobile fixes to prevent overflow */
+        /* CRITICAL: Fix page edges and prevent overflow */
         @media (max-width: 768px) {
-            body, html {
+            html, body {
+                width: 100% !important;
+                max-width: 100vw !important;
+                overflow-x: hidden !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                position: relative !important;
+            }
+            
+            /* Force equal padding on all containers */
+            .main-content {
+                padding: 15px 15px !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
                 width: 100% !important;
                 max-width: 100% !important;
-                overflow-x: hidden !important;
-                position: relative;
             }
-            .main-content,
-            .article-container,
-            .article-main,
-            .article-body,
-            .article-header,
-            .comment-form,
-            .sidebar,
-            .sidebar-widget,
+            
+            .article-container {
+                padding: 0 !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                gap: 20px !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            
+            .article-main {
+                padding: 15px 15px !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            
+            .article-body {
+                padding: 0 !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            
+            .article-header {
+                padding: 0 !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+            }
+            
+            .sidebar {
+                padding: 0 !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            
+            .sidebar-widget {
+                padding: 15px 15px !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+            
+            /* Force all content to fit */
             .article-body > *,
             .article-body p,
-            .article-body div,
+            .article-body div:not(.in-article-ad):not(.ad-container),
             .article-body span,
             .article-body h1,
             .article-body h2,
@@ -1557,26 +1664,47 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 word-wrap: break-word !important;
                 overflow-wrap: break-word !important;
                 word-break: break-word !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                padding-left: 0 !important;
+                padding-right: 0 !important;
             }
+            
             .article-body img {
                 height: auto !important;
+                max-width: 100% !important;
             }
+            
             table {
                 width: 100% !important;
+                max-width: 100% !important;
                 display: block !important;
                 overflow-x: auto !important;
                 -webkit-overflow-scrolling: touch;
             }
+            
             pre, code {
                 word-wrap: break-word !important;
                 white-space: pre-wrap !important;
                 max-width: 100% !important;
                 overflow-x: auto !important;
             }
-            /* Force break long URLs and words */
+            
             a {
                 word-break: break-all !important;
                 overflow-wrap: break-word !important;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .main-content {
+                padding: 10px 10px !important;
+            }
+            .article-main {
+                padding: 10px 10px !important;
+            }
+            .sidebar-widget {
+                padding: 10px 10px !important;
             }
         }
         
@@ -1607,27 +1735,6 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             }
         }
     </style>
-    <script>
-    // Initialize AdSense ads after page loads
-    window.addEventListener('DOMContentLoaded', function() {
-        setTimeout(function() {
-            if (typeof adsbygoogle !== 'undefined') {
-                try {
-                    var adElements = document.querySelectorAll('.adsbygoogle');
-                    adElements.forEach(function(ad) {
-                        try {
-                            (adsbygoogle = window.adsbygoogle || []).push({});
-                        } catch(e) {
-                            console.log('AdSense push error:', e);
-                        }
-                    });
-                } catch(e) {
-                    console.log('AdSense initialization error:', e);
-                }
-            }
-        }, 500);
-    });
-    </script>
 </head>
 <body>
     <?php
@@ -1739,7 +1846,7 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 <?php endif; ?>
 
                 <!-- Article Body -->
-                <div class="article-body">
+                <div class="article-body" style="width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; padding: 0 !important; margin-left: 0 !important; margin-right: 0 !important;">
                     <?php 
                     // Get ad code for in-article ads
                     $in_article_ad = '';
@@ -1748,7 +1855,8 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     }
                     // Insert ads after every 4 paragraphs
                     $content_with_ads = insertAdsInContent($news_item['content'], $in_article_ad);
-                    // Output content directly (already HTML from database)
+                    // Output content directly - RAW HTML (no escaping)
+                    // Content from database is already HTML, scripts will execute
                     echo $content_with_ads;
                     ?>
                 </div>
@@ -2237,27 +2345,112 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
     </script>
     
     <script>
-    // Initialize AdSense ads after DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
-        setTimeout(function() {
-            if (typeof adsbygoogle !== 'undefined') {
-                try {
-                    var adElements = document.querySelectorAll('.adsbygoogle');
-                    adElements.forEach(function(ad) {
-                        try {
-                            (adsbygoogle = window.adsbygoogle || []).push({});
-                        } catch(e) {
-                            console.log('AdSense push error:', e);
+    // Initialize AdSense ads - COMPREHENSIVE INITIALIZATION
+    (function() {
+        var initAttempts = 0;
+        var maxAttempts = 10;
+        
+        function initAdSense() {
+            initAttempts++;
+            
+            // Check if AdSense script is loaded
+            if (typeof adsbygoogle === 'undefined') {
+                // Check if script tag exists
+                var scriptExists = false;
+                var scripts = document.getElementsByTagName('script');
+                for (var i = 0; i < scripts.length; i++) {
+                    if (scripts[i].src && scripts[i].src.indexOf('pagead2.googlesyndication.com') !== -1) {
+                        scriptExists = true;
+                        break;
+                    }
+                }
+                
+                if (scriptExists && initAttempts < maxAttempts) {
+                    // Script is loading, wait more
+                    setTimeout(initAdSense, 1000);
+                }
+                return;
+            }
+            
+            // AdSense is available, initialize ads
+            try {
+                // Find all .adsbygoogle elements
+                var adElements = document.querySelectorAll('.adsbygoogle');
+                
+                if (adElements.length > 0) {
+                    adElements.forEach(function(adElement) {
+                        // Only initialize if not already initialized
+                        if (!adElement.hasAttribute('data-adsbygoogle-status')) {
+                            try {
+                                (adsbygoogle = window.adsbygoogle || []).push({});
+                                adElement.setAttribute('data-adsbygoogle-status', 'done');
+                                console.log('AdSense ad initialized');
+                            } catch(e) {
+                                console.log('AdSense push error:', e);
+                            }
                         }
                     });
-                    // Also try to initialize any dynamically inserted ads
-                    (adsbygoogle = window.adsbygoogle || []).push({});
-                } catch(e) {
-                    console.log('AdSense initialization error:', e);
                 }
+                
+                // Also execute any push scripts in ad containers
+                var adContainers = document.querySelectorAll('.in-article-ad');
+                adContainers.forEach(function(container) {
+                    var scripts = container.querySelectorAll('script');
+                    scripts.forEach(function(script) {
+                        if (script.textContent && script.textContent.indexOf('adsbygoogle') !== -1 && script.textContent.indexOf('push') !== -1) {
+                            try {
+                                // Execute the push script
+                                eval(script.textContent);
+                            } catch(e) {
+                                // Might have already executed
+                            }
+                        }
+                    });
+                });
+                
+            } catch(e) {
+                console.log('AdSense initialization error:', e);
             }
-        }, 1000);
-    });
+        }
+        
+        // Initialize on DOM ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                setTimeout(initAdSense, 2000);
+            });
+        } else {
+            setTimeout(initAdSense, 2000);
+        }
+        
+        // Also try after page fully loads
+        window.addEventListener('load', function() {
+            setTimeout(initAdSense, 3000);
+        });
+        
+        // Monitor for dynamically added ads
+        if (window.MutationObserver) {
+            var observer = new MutationObserver(function(mutations) {
+                var hasNewAds = false;
+                mutations.forEach(function(mutation) {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1) {
+                            if ((node.classList && node.classList.contains('adsbygoogle')) || 
+                                (node.querySelector && node.querySelector('.adsbygoogle'))) {
+                                hasNewAds = true;
+                            }
+                        }
+                    });
+                });
+                if (hasNewAds) {
+                    setTimeout(initAdSense, 1000);
+                }
+            });
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
+        }
+    })();
     </script>
 
     <?php
