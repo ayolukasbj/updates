@@ -23,29 +23,83 @@ if (session_status() === PHP_SESSION_NONE) {
 $db = new Database();
 $conn = $db->getConnection();
 
-// Create news_comments table if doesn't exist
+// Create or alter news_comments table to ensure it has all required columns
 try {
-    $conn->exec("
-        CREATE TABLE IF NOT EXISTS news_comments (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            news_id INT NOT NULL,
-            user_id INT,
-            name VARCHAR(100),
-            email VARCHAR(255),
-            website VARCHAR(255),
-            comment TEXT NOT NULL,
-            is_approved BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (news_id) REFERENCES news(id) ON DELETE CASCADE,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-            INDEX idx_news (news_id),
-            INDEX idx_user (user_id),
-            INDEX idx_approved (is_approved)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    ");
+    // Check if table exists
+    $table_exists = false;
+    try {
+        $conn->query("SELECT 1 FROM news_comments LIMIT 1");
+        $table_exists = true;
+    } catch (Exception $e) {
+        $table_exists = false;
+    }
+    
+    if (!$table_exists) {
+        // Create table with all columns
+        $conn->exec("
+            CREATE TABLE IF NOT EXISTS news_comments (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                news_id INT NOT NULL,
+                user_id INT,
+                name VARCHAR(100),
+                email VARCHAR(255),
+                website VARCHAR(255),
+                comment TEXT NOT NULL,
+                is_approved BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (news_id) REFERENCES news(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+                INDEX idx_news (news_id),
+                INDEX idx_user (user_id),
+                INDEX idx_approved (is_approved)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        ");
+    } else {
+        // Table exists - check and add missing columns
+        $columns = [];
+        try {
+            $col_stmt = $conn->query("SHOW COLUMNS FROM news_comments");
+            $columns = $col_stmt->fetchAll(PDO::FETCH_COLUMN);
+        } catch (Exception $e) {
+            // Continue
+        }
+        
+        // Add name column if it doesn't exist
+        if (!in_array('name', $columns)) {
+            try {
+                $conn->exec("ALTER TABLE news_comments ADD COLUMN name VARCHAR(100) AFTER user_id");
+            } catch (Exception $e) {
+                error_log("Error adding name column: " . $e->getMessage());
+            }
+        }
+        
+        // Add email column if it doesn't exist
+        if (!in_array('email', $columns)) {
+            try {
+                $conn->exec("ALTER TABLE news_comments ADD COLUMN email VARCHAR(255) AFTER name");
+            } catch (Exception $e) {
+                error_log("Error adding email column: " . $e->getMessage());
+            }
+        }
+        
+        // Add website column if it doesn't exist
+        if (!in_array('website', $columns)) {
+            try {
+                $conn->exec("ALTER TABLE news_comments ADD COLUMN website VARCHAR(255) AFTER email");
+            } catch (Exception $e) {
+                error_log("Error adding website column: " . $e->getMessage());
+            }
+        }
+        
+        // Change user_id to allow NULL if it's currently NOT NULL
+        try {
+            $conn->exec("ALTER TABLE news_comments MODIFY COLUMN user_id INT NULL");
+        } catch (Exception $e) {
+            // Column might already allow NULL or have constraints
+        }
+    }
 } catch (Exception $e) {
-    // Table might already exist - continue
-    error_log("News comments table creation: " . $e->getMessage());
+    error_log("News comments table setup error: " . $e->getMessage());
 }
 
 $action = $_GET['action'] ?? $_POST['action'] ?? 'list';
@@ -60,15 +114,37 @@ try {
                 exit;
             }
             
-            $stmt = $conn->prepare("
-                SELECT nc.*, 
-                       COALESCE(u.username, nc.name, 'Anonymous') as display_name,
-                       COALESCE(u.avatar, '') as avatar
-                FROM news_comments nc
-                LEFT JOIN users u ON nc.user_id = u.id
-                WHERE nc.news_id = ? AND nc.is_approved = 1
-                ORDER BY nc.created_at DESC
-            ");
+            // Check if name column exists
+            $has_name_column = false;
+            try {
+                $col_check = $conn->query("SHOW COLUMNS FROM news_comments LIKE 'name'");
+                $has_name_column = $col_check->rowCount() > 0;
+            } catch (Exception $e) {
+                $has_name_column = false;
+            }
+            
+            if ($has_name_column) {
+                $stmt = $conn->prepare("
+                    SELECT nc.*, 
+                           COALESCE(u.username, nc.name, 'Anonymous') as display_name,
+                           COALESCE(u.avatar, '') as avatar
+                    FROM news_comments nc
+                    LEFT JOIN users u ON nc.user_id = u.id
+                    WHERE nc.news_id = ? AND nc.is_approved = 1
+                    ORDER BY nc.created_at DESC
+                ");
+            } else {
+                // Fallback for old schema without name column
+                $stmt = $conn->prepare("
+                    SELECT nc.*, 
+                           COALESCE(u.username, 'Anonymous') as display_name,
+                           COALESCE(u.avatar, '') as avatar
+                    FROM news_comments nc
+                    LEFT JOIN users u ON nc.user_id = u.id
+                    WHERE nc.news_id = ? AND nc.is_approved = 1
+                    ORDER BY nc.created_at DESC
+                ");
+            }
             $stmt->execute([$news_id]);
             $comments = $stmt->fetchAll(PDO::FETCH_ASSOC);
             

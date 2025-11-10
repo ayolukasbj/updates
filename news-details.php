@@ -428,38 +428,73 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
     
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html {
+            width: 100%;
+            overflow-x: hidden;
+        }
         body {
             background: #fff;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             color: #222;
             line-height: 1.6;
+            width: 100%;
+            max-width: 100%;
+            overflow-x: hidden;
+        }
+        img, video, iframe {
+            max-width: 100%;
+            height: auto;
         }
         .main-content {
             max-width: 1200px;
             margin: 0 auto;
             padding: 30px 20px;
             overflow-x: hidden;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        @media (max-width: 768px) {
+            .main-content {
+                padding: 15px;
+                width: 100%;
+                max-width: 100%;
+            }
         }
         .article-container {
             display: grid;
             grid-template-columns: 1fr 360px;
             gap: 40px;
             margin-top: 20px;
+            width: 100%;
+            box-sizing: border-box;
         }
         @media (max-width: 1024px) {
             .article-container {
                 grid-template-columns: 1fr;
                 gap: 30px;
+                width: 100%;
             }
         }
         .article-main {
             background: #fff;
             padding: 40px;
             overflow-x: hidden;
+            width: 100%;
+            box-sizing: border-box;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
         @media (max-width: 768px) {
             .article-main {
-                padding: 20px;
+                padding: 15px;
+                width: 100%;
+                max-width: 100%;
+                margin: 0;
+            }
+        }
+        @media (max-width: 480px) {
+            .article-main {
+                padding: 12px;
             }
         }
         
@@ -531,6 +566,23 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             line-height: 1.2;
             color: #222;
             margin-bottom: 20px;
+            width: 100%;
+            max-width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            box-sizing: border-box;
+        }
+        @media (max-width: 768px) {
+            .article-title {
+                font-size: 28px;
+                line-height: 1.3;
+                margin-bottom: 15px;
+            }
+        }
+        @media (max-width: 480px) {
+            .article-title {
+                font-size: 24px;
+            }
         }
         .article-byline {
             display: flex;
@@ -610,9 +662,32 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             padding: 0;
             overflow-wrap: break-word;
             word-wrap: break-word;
+            word-break: break-word;
+            hyphens: auto;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        @media (max-width: 768px) {
+            .article-body {
+                font-size: 16px;
+                line-height: 1.7;
+                margin: 20px 0;
+                padding: 0;
+                width: 100%;
+            }
         }
         .article-body p {
             margin-bottom: 24px;
+            width: 100%;
+            max-width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        @media (max-width: 768px) {
+            .article-body p {
+                margin-bottom: 18px;
+            }
         }
         .article-body h2 {
             font-size: 32px;
@@ -620,6 +695,16 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             margin: 40px 0 20px;
             color: #222;
             line-height: 1.3;
+            width: 100%;
+            max-width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        @media (max-width: 768px) {
+            .article-body h2 {
+                font-size: 24px;
+                margin: 30px 0 15px;
+            }
         }
         .article-body h3 {
             font-size: 26px;
@@ -627,6 +712,16 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             margin: 35px 0 18px;
             color: #222;
             line-height: 1.3;
+            width: 100%;
+            max-width: 100%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        @media (max-width: 768px) {
+            .article-body h3 {
+                font-size: 20px;
+                margin: 25px 0 12px;
+            }
         }
         .article-body blockquote {
             border-left: 4px solid #e74c3c;
@@ -636,12 +731,31 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             font-style: italic;
             color: #555;
             font-size: 20px;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        @media (max-width: 768px) {
+            .article-body blockquote {
+                padding: 15px 20px;
+                margin: 20px 0;
+                font-size: 18px;
+            }
         }
         .article-body img {
             max-width: 100%;
+            width: 100%;
             height: auto;
             margin: 30px 0;
             border-radius: 4px;
+            box-sizing: border-box;
+        }
+        @media (max-width: 768px) {
+            .article-body img {
+                margin: 20px 0;
+            }
         }
         
         /* Tags Section */
@@ -885,6 +999,19 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             padding: 30px;
             border: 1px solid #eee;
             border-radius: 4px;
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        @media (max-width: 768px) {
+            .comment-form {
+                padding: 20px;
+            }
+        }
+        @media (max-width: 480px) {
+            .comment-form {
+                padding: 15px;
+            }
         }
         .comment-form p {
             font-size: 14px;
@@ -909,11 +1036,21 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
         .form-group input[type="email"],
         .form-group input[type="url"] {
             width: 100%;
+            max-width: 100%;
             padding: 12px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 14px;
             font-family: inherit;
+            box-sizing: border-box;
+        }
+        @media (max-width: 768px) {
+            .form-group textarea,
+            .form-group input[type="text"],
+            .form-group input[type="email"],
+            .form-group input[type="url"] {
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
         }
         .form-group textarea {
             min-height: 150px;
