@@ -247,15 +247,84 @@ try {
     die('Fatal error loading news article. Please check error logs.');
 }
 
-// Get comment count
+// Get comment count and comments
 $comment_count = 0;
+$news_comments = [];
 try {
-    $comment_stmt = $conn->prepare("SELECT COUNT(*) as count FROM news_comments WHERE news_id = ? AND is_approved = 1");
-    $comment_stmt->execute([$news_item['id']]);
-    $comment_result = $comment_stmt->fetch(PDO::FETCH_ASSOC);
-    $comment_count = $comment_result['count'] ?? 0;
+    // Check if is_approved column exists
+    $col_check = $conn->query("SHOW COLUMNS FROM news_comments LIKE 'is_approved'");
+    $has_is_approved = $col_check->rowCount() > 0;
+    
+    if ($has_is_approved) {
+        $comment_stmt = $conn->prepare("SELECT COUNT(*) as count FROM news_comments WHERE news_id = ? AND is_approved = 1");
+        $comment_stmt->execute([$news_item['id']]);
+        $comment_result = $comment_stmt->fetch(PDO::FETCH_ASSOC);
+        $comment_count = $comment_result['count'] ?? 0;
+        
+        // Fetch comments
+        $comments_stmt = $conn->prepare("
+            SELECT nc.*, 
+                   COALESCE(u.username, nc.name, 'Anonymous') as display_name,
+                   COALESCE(u.avatar, '') as avatar
+            FROM news_comments nc
+            LEFT JOIN users u ON nc.user_id = u.id
+            WHERE nc.news_id = ? AND nc.is_approved = 1
+            ORDER BY nc.created_at DESC
+        ");
+        $comments_stmt->execute([$news_item['id']]);
+        $news_comments = $comments_stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        // Fallback without is_approved
+        $comment_stmt = $conn->prepare("SELECT COUNT(*) as count FROM news_comments WHERE news_id = ?");
+        $comment_stmt->execute([$news_item['id']]);
+        $comment_result = $comment_stmt->fetch(PDO::FETCH_ASSOC);
+        $comment_count = $comment_result['count'] ?? 0;
+        
+        $comments_stmt = $conn->prepare("
+            SELECT nc.*, 
+                   COALESCE(u.username, 'Anonymous') as display_name,
+                   COALESCE(u.avatar, '') as avatar
+            FROM news_comments nc
+            LEFT JOIN users u ON nc.user_id = u.id
+            WHERE nc.news_id = ?
+            ORDER BY nc.created_at DESC
+        ");
+        $comments_stmt->execute([$news_item['id']]);
+        $news_comments = $comments_stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
 } catch (Exception $e) {
-    error_log('Error fetching comment count: ' . $e->getMessage());
+    error_log('Error fetching comments: ' . $e->getMessage());
+    $comment_count = 0;
+    $news_comments = [];
+}
+
+// Function to insert ads after every 4 paragraphs
+function insertAdsInContent($content, $adCode) {
+    if (empty($adCode)) {
+        return $content;
+    }
+    
+    // Split content by paragraph tags
+    $paragraphs = preg_split('/(<\/p>)/i', $content, -1, PREG_SPLIT_DELIM_CAPTURE);
+    
+    $result = '';
+    $paragraphCount = 0;
+    
+    foreach ($paragraphs as $index => $part) {
+        $result .= $part;
+        
+        // Check if this is a closing </p> tag
+        if (stripos($part, '</p>') !== false) {
+            $paragraphCount++;
+            
+            // Insert ad after every 4 paragraphs
+            if ($paragraphCount % 4 == 0 && $index < count($paragraphs) - 1) {
+                $result .= '<div class="in-article-ad" style="margin: 30px 0; text-align: center; padding: 20px; background: #f9f9f9; border-radius: 4px;">' . $adCode . '</div>';
+            }
+        }
+    }
+    
+    return $result;
 }
 
 // Get previous and next news
@@ -353,7 +422,17 @@ function getSocialLinks($conn) {
 
 $social_links = getSocialLinks($conn);
 
-// Helper function for display ad
+// Load ads helper
+$ads_path = $base_dir . '/includes/ads.php';
+if (file_exists($ads_path)) {
+    require_once $ads_path;
+} elseif (file_exists('includes/ads.php')) {
+    require_once 'includes/ads.php';
+} elseif (file_exists(__DIR__ . '/includes/ads.php')) {
+    require_once __DIR__ . '/includes/ads.php';
+}
+
+// Helper function for display ad (fallback if ads.php not found)
 if (!function_exists('displayAd')) {
     function displayAd($position) {
         return '';
@@ -464,9 +543,14 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
         }
         @media (max-width: 768px) {
             .main-content {
-                padding: 15px;
+                padding: 15px 15px;
                 width: 100%;
                 max-width: 100%;
+            }
+        }
+        @media (max-width: 480px) {
+            .main-content {
+                padding: 10px 10px;
             }
         }
         .article-container {
@@ -495,7 +579,7 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
         }
         @media (max-width: 768px) {
             .article-main {
-                padding: 15px;
+                padding: 15px 15px;
                 width: 100%;
                 max-width: 100%;
                 margin: 0;
@@ -503,7 +587,25 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
         }
         @media (max-width: 480px) {
             .article-main {
-                padding: 12px;
+                padding: 10px 10px;
+            }
+        }
+        
+        /* In-article ads styling */
+        .in-article-ad {
+            margin: 30px 0 !important;
+            text-align: center;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        @media (max-width: 768px) {
+            .in-article-ad {
+                padding: 15px !important;
+                margin: 20px 0 !important;
             }
         }
         
@@ -1505,7 +1607,16 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 <!-- Article Body -->
                 <div class="article-body" style="width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; word-wrap: break-word !important; overflow-wrap: break-word !important; word-break: break-word !important;">
                     <div style="width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; word-wrap: break-word !important; overflow-wrap: break-word !important; word-break: break-word !important;">
-                        <?php echo $news_item['content']; ?>
+                        <?php 
+                        // Get ad code for in-article ads
+                        $in_article_ad = '';
+                        if (function_exists('displayAd')) {
+                            $in_article_ad = displayAd('news_in_article');
+                        }
+                        // Insert ads after every 4 paragraphs
+                        $content_with_ads = insertAdsInContent($news_item['content'], $in_article_ad);
+                        echo $content_with_ads; 
+                        ?>
                     </div>
                 </div>
 
@@ -1607,7 +1718,39 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
 
                 <!-- Comments Section -->
                 <div class="comments-section">
-                    <h2 class="comments-title">Leave a Reply</h2>
+                    <h2 class="comments-title">
+                        <?php echo $comment_count > 0 ? $comment_count . ' ' . ($comment_count == 1 ? 'Comment' : 'Comments') : 'Leave a Reply'; ?>
+                    </h2>
+                    
+                    <!-- Display Existing Comments -->
+                    <?php if (!empty($news_comments)): ?>
+                    <div class="comments-list" style="margin-bottom: 40px;">
+                        <?php foreach ($news_comments as $comment): ?>
+                        <div class="comment-item" style="padding: 20px; margin-bottom: 20px; border-bottom: 1px solid #eee; background: #f9f9f9; border-radius: 4px;">
+                            <div class="comment-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                                <?php if (!empty($comment['avatar'])): ?>
+                                <img src="<?php echo htmlspecialchars($comment['avatar']); ?>" alt="<?php echo htmlspecialchars($comment['display_name']); ?>" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                                <?php else: ?>
+                                <div style="width: 40px; height: 40px; border-radius: 50%; background: #e74c3c; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
+                                    <?php echo strtoupper(substr($comment['display_name'], 0, 1)); ?>
+                                </div>
+                                <?php endif; ?>
+                                <div>
+                                    <strong style="color: #222; font-size: 14px;"><?php echo htmlspecialchars($comment['display_name']); ?></strong>
+                                    <div style="font-size: 12px; color: #999;">
+                                        <?php echo date('F j, Y \a\t g:i A', strtotime($comment['created_at'])); ?>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="comment-content" style="color: #333; line-height: 1.6; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">
+                                <?php echo nl2br(htmlspecialchars($comment['comment'])); ?>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
+                    
+                    <h3 class="comments-title" style="font-size: 20px; margin-bottom: 20px;">Leave a Reply</h3>
                     <div class="comment-form">
                         <p>Your email address will not be published. Required fields are marked <span class="required">*</span></p>
                         <div id="comment-message" style="display: none; padding: 12px; margin-bottom: 15px; border-radius: 4px;"></div>
