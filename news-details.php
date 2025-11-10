@@ -232,15 +232,24 @@ try {
     }
     
     // Set featured_image for display (use display_image from query or fallback to image)
-    if (!isset($news_item['featured_image']) || empty($news_item['featured_image'])) {
+    if (!isset($news_item['featured_image']) || empty($news_item['featured_image']) || trim($news_item['featured_image']) === '') {
         $news_item['featured_image'] = $news_item['display_image'] ?? $news_item['image'] ?? '';
     }
-    // Ensure image field is set if empty
-    if (empty($news_item['image']) && !empty($news_item['display_image'])) {
-        $news_item['image'] = $news_item['display_image'];
+    // Ensure image field is set if empty - prioritize actual image field
+    if (empty($news_item['image']) || trim($news_item['image']) === '') {
+        if (!empty($news_item['display_image']) && trim($news_item['display_image']) !== '') {
+            $news_item['image'] = $news_item['display_image'];
+        } elseif (!empty($news_item['featured_image']) && trim($news_item['featured_image']) !== '') {
+            $news_item['image'] = $news_item['featured_image'];
+        }
     }
-    if (empty($news_item['image']) && !empty($news_item['featured_image'])) {
-        $news_item['image'] = $news_item['featured_image'];
+    // Also ensure featured_image is set
+    if (empty($news_item['featured_image']) || trim($news_item['featured_image']) === '') {
+        if (!empty($news_item['image']) && trim($news_item['image']) !== '') {
+            $news_item['featured_image'] = $news_item['image'];
+        } elseif (!empty($news_item['display_image']) && trim($news_item['display_image']) !== '') {
+            $news_item['featured_image'] = $news_item['display_image'];
+        }
     }
     
     // Increment view count
@@ -1918,6 +1927,45 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
 </head>
 <body>
     <?php
+    // Ensure asset_path function is available before header is included
+    // This is needed because header.php uses asset_path for logo
+    if (!function_exists('asset_path')) {
+        function asset_path($path) {
+            if (empty($path)) return '';
+            
+            // If already absolute URL, return as is
+            if (strpos($path, 'http://') === 0 || strpos($path, 'https://') === 0) {
+                return $path;
+            }
+            
+            // Get base URL
+            $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $baseUrl = $protocol . $host;
+            
+            // Use SITE_URL if defined
+            if (defined('SITE_URL') && !empty(SITE_URL)) {
+                $siteUrl = rtrim(SITE_URL, '/');
+                if (strpos($path, '/') === 0) {
+                    return $siteUrl . $path;
+                }
+                return $siteUrl . '/' . ltrim($path, '/');
+            }
+            
+            // Build path
+            $path = str_replace('\\', '/', $path);
+            $path = preg_replace('#^\.\./#', '', $path);
+            $path = ltrim($path, '/');
+            
+            $base_path = defined('BASE_PATH') ? BASE_PATH : '/';
+            if ($base_path !== '/' && substr($base_path, -1) !== '/') {
+                $base_path .= '/';
+            }
+            
+            return $baseUrl . $base_path . $path;
+        }
+    }
+    
     // Include header with robust error handling
     try {
         $header_path = $base_dir . '/includes/header.php';
@@ -1927,6 +1975,10 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
         if (file_exists($header_path)) {
             if (!defined('SKIP_MAINTENANCE_CHECK')) {
                 define('SKIP_MAINTENANCE_CHECK', true);
+            }
+            // Ensure database connection is available for header
+            if ($conn) {
+                // Connection is already available
             }
             include $header_path;
         } else {
@@ -2022,36 +2074,30 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
 
                 <!-- Featured Image -->
                 <?php 
-                // Get featured image - prioritize actual image field, then featured_image, then display_image
+                // Get featured image - try all possible sources
                 $featured_image_url = '';
+                $raw_image_path = '';
                 
-                // Debug: Log all image fields
-                error_log("News Image Debug - image: " . ($news_item['image'] ?? 'empty') . ", featured_image: " . ($news_item['featured_image'] ?? 'empty') . ", display_image: " . ($news_item['display_image'] ?? 'empty'));
-                
-                // Try image field first (most reliable)
+                // First, get the raw image path from any available field
                 if (!empty($news_item['image']) && trim($news_item['image']) !== '') {
-                    $featured_image_url = asset_path($news_item['image']);
-                } 
-                // Then try featured_image
-                elseif (!empty($news_item['featured_image']) && trim($news_item['featured_image']) !== '') {
-                    $featured_image_url = asset_path($news_item['featured_image']);
-                } 
-                // Finally try display_image
-                elseif (!empty($news_item['display_image']) && trim($news_item['display_image']) !== '') {
-                    $featured_image_url = asset_path($news_item['display_image']);
+                    $raw_image_path = trim($news_item['image']);
+                } elseif (!empty($news_item['featured_image']) && trim($news_item['featured_image']) !== '') {
+                    $raw_image_path = trim($news_item['featured_image']);
+                } elseif (!empty($news_item['display_image']) && trim($news_item['display_image']) !== '') {
+                    $raw_image_path = trim($news_item['display_image']);
                 }
                 
-                // If still empty, try to get from database directly
-                if (empty($featured_image_url)) {
+                // If still empty, query database directly
+                if (empty($raw_image_path)) {
                     try {
                         $imgStmt = $conn->prepare("SELECT image, featured_image FROM news WHERE id = ?");
                         $imgStmt->execute([$news_item['id']]);
                         $imgData = $imgStmt->fetch(PDO::FETCH_ASSOC);
                         if ($imgData) {
                             if (!empty($imgData['image']) && trim($imgData['image']) !== '') {
-                                $featured_image_url = asset_path($imgData['image']);
+                                $raw_image_path = trim($imgData['image']);
                             } elseif (!empty($imgData['featured_image']) && trim($imgData['featured_image']) !== '') {
-                                $featured_image_url = asset_path($imgData['featured_image']);
+                                $raw_image_path = trim($imgData['featured_image']);
                             }
                         }
                     } catch (Exception $e) {
@@ -2059,16 +2105,22 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     }
                 }
                 
+                // Convert raw path to full URL using asset_path
+                if (!empty($raw_image_path)) {
+                    $featured_image_url = asset_path($raw_image_path);
+                    error_log("News Featured Image - Raw path: " . $raw_image_path . ", Full URL: " . $featured_image_url);
+                }
+                
                 if (!empty($featured_image_url)): 
                 ?>
-                <div class="article-featured-image">
+                <div class="article-featured-image" style="margin: 20px 0; width: 100%;">
                     <img src="<?php echo htmlspecialchars($featured_image_url); ?>" 
                          alt="<?php echo htmlspecialchars($news_item['title']); ?>"
-                         style="max-width: 100%; height: auto; display: block; width: 100%;"
-                         onerror="console.error('Image failed to load: <?php echo htmlspecialchars($featured_image_url); ?>'); this.style.display='none';">
+                         style="max-width: 100%; height: auto; display: block; width: 100%; border-radius: 8px;"
+                         onerror="console.error('Featured image failed to load: <?php echo htmlspecialchars($featured_image_url); ?>'); this.style.display='none'; this.parentElement.innerHTML='<div style=\'padding: 40px; text-align: center; background: #f5f5f5; border-radius: 8px; color: #999;\'><i class=\'fas fa-image\' style=\'font-size: 48px; margin-bottom: 10px; display: block;\'></i><p>Image not available</p></div>';">
                 </div>
                 <?php else: ?>
-                <!-- No featured image available -->
+                <!-- No featured image available for this news article -->
                 <?php endif; ?>
 
                 <?php

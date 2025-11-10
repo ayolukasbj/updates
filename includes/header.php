@@ -173,19 +173,28 @@ if (file_exists(__DIR__ . '/brand-colors.php')) {
 // Load site settings
 function getHeaderSetting($key, $default = '') {
     try {
-        require_once __DIR__ . '/../config/database.php';
-        $db = new Database();
-        $conn = $db->getConnection();
-        $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = ?");
-        $stmt->execute([$key]);
-        $result = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $result ? $result['setting_value'] : $default;
+        // Try to use existing connection if available
+        global $conn;
+        if (!$conn) {
+            require_once __DIR__ . '/../config/database.php';
+            $db = new Database();
+            $conn = $db->getConnection();
+        }
+        if ($conn) {
+            $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = ?");
+            $stmt->execute([$key]);
+            $result = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($result && !empty($result['setting_value'])) {
+                return $result['setting_value'];
+            }
+        }
     } catch (Exception $e) {
-        return $default;
+        error_log("Error getting header setting $key: " . $e->getMessage());
     }
+    return $default;
 }
 
-$site_name = getHeaderSetting('site_name', SITE_NAME);
+$site_name = getHeaderSetting('site_name', defined('SITE_NAME') ? SITE_NAME : '');
 $show_site_name = getHeaderSetting('show_site_name', '1');
 $site_logo = getHeaderSetting('site_logo', '');
 $site_favicon = getHeaderSetting('site_favicon', '');
@@ -784,7 +793,6 @@ if (function_exists('renderThemeStyles')) {
             <?php 
             // Always try to show logo if available
             $logoDisplayed = false;
-            $logoImgTag = '';
             
             // Debug log
             error_log("Header Logo Debug - site_logo from DB: " . ($site_logo ?? 'empty'));
@@ -801,10 +809,10 @@ if (function_exists('renderThemeStyles')) {
                 $logoPath = asset_path($normalizedLogo);
                 
                 // If asset_path returns empty or same as input, try manual construction
-                if (empty($logoPath) || $logoPath === $normalizedLogo) {
+                if (empty($logoPath) || $logoPath === $normalizedLogo || $logoPath === '/' || $logoPath === $currentBaseUrl) {
                     // Build path manually
                     $baseWithoutSlash = rtrim($currentBaseUrl, '/');
-                    if (strpos($normalizedLogo, 'http') === 0) {
+                    if (strpos($normalizedLogo, 'http://') === 0 || strpos($normalizedLogo, 'https://') === 0) {
                         $logoPath = $normalizedLogo;
                     } elseif (strpos($normalizedLogo, '/') === 0) {
                         $logoPath = $baseWithoutSlash . $normalizedLogo;
@@ -815,12 +823,15 @@ if (function_exists('renderThemeStyles')) {
                 
                 error_log("Header Logo Debug - normalized: " . $normalizedLogo . ", final path: " . $logoPath);
                 
-                // Always show logo image if path exists - let browser handle loading errors
-                if (!empty($logoPath) && $logoPath !== '/' && $logoPath !== $currentBaseUrl && $logoPath !== $normalizedLogo):
+                // Always show logo image if we have a valid path - let browser handle loading errors
+                // Show logo if path is not empty and not just a slash
+                if (!empty($logoPath) && $logoPath !== '/' && strlen($logoPath) > 1):
                     $logoDisplayed = true;
-                    $logoImgTag = '<img src="' . htmlspecialchars($logoPath) . '" alt="' . htmlspecialchars($site_name ?: SITE_NAME) . '" style="width: 32px; height: 32px; object-fit: contain; display: block;" onerror="this.style.display=\'none\'; if(this.nextElementSibling) this.nextElementSibling.style.display=\'block\';">';
             ?>
-                <?php echo $logoImgTag; ?>
+                <img src="<?php echo htmlspecialchars($logoPath); ?>" 
+                     alt="<?php echo htmlspecialchars($site_name ?: (defined('SITE_NAME') ? SITE_NAME : '')); ?>" 
+                     style="width: 32px; height: 32px; object-fit: contain; display: block;"
+                     onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='block';">
             <?php endif; endif; ?>
             <?php if (!$logoDisplayed): ?>
                 <i class="fas fa-music"></i>
