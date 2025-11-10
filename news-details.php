@@ -232,8 +232,15 @@ try {
     }
     
     // Set featured_image for display (use display_image from query or fallback to image)
-    if (!isset($news_item['featured_image'])) {
+    if (!isset($news_item['featured_image']) || empty($news_item['featured_image'])) {
         $news_item['featured_image'] = $news_item['display_image'] ?? $news_item['image'] ?? '';
+    }
+    // Ensure image field is set if empty
+    if (empty($news_item['image']) && !empty($news_item['display_image'])) {
+        $news_item['image'] = $news_item['display_image'];
+    }
+    if (empty($news_item['image']) && !empty($news_item['featured_image'])) {
+        $news_item['image'] = $news_item['featured_image'];
     }
     
     // Increment view count
@@ -2015,14 +2022,41 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
 
                 <!-- Featured Image -->
                 <?php 
-                // Get featured image - use asset_path for consistent URL generation
+                // Get featured image - prioritize actual image field, then featured_image, then display_image
                 $featured_image_url = '';
-                if (!empty($news_item['image'])) {
+                
+                // Debug: Log all image fields
+                error_log("News Image Debug - image: " . ($news_item['image'] ?? 'empty') . ", featured_image: " . ($news_item['featured_image'] ?? 'empty') . ", display_image: " . ($news_item['display_image'] ?? 'empty'));
+                
+                // Try image field first (most reliable)
+                if (!empty($news_item['image']) && trim($news_item['image']) !== '') {
                     $featured_image_url = asset_path($news_item['image']);
-                } elseif (!empty($news_item['featured_image'])) {
+                } 
+                // Then try featured_image
+                elseif (!empty($news_item['featured_image']) && trim($news_item['featured_image']) !== '') {
                     $featured_image_url = asset_path($news_item['featured_image']);
-                } elseif (!empty($news_item['display_image'])) {
+                } 
+                // Finally try display_image
+                elseif (!empty($news_item['display_image']) && trim($news_item['display_image']) !== '') {
                     $featured_image_url = asset_path($news_item['display_image']);
+                }
+                
+                // If still empty, try to get from database directly
+                if (empty($featured_image_url)) {
+                    try {
+                        $imgStmt = $conn->prepare("SELECT image, featured_image FROM news WHERE id = ?");
+                        $imgStmt->execute([$news_item['id']]);
+                        $imgData = $imgStmt->fetch(PDO::FETCH_ASSOC);
+                        if ($imgData) {
+                            if (!empty($imgData['image']) && trim($imgData['image']) !== '') {
+                                $featured_image_url = asset_path($imgData['image']);
+                            } elseif (!empty($imgData['featured_image']) && trim($imgData['featured_image']) !== '') {
+                                $featured_image_url = asset_path($imgData['featured_image']);
+                            }
+                        }
+                    } catch (Exception $e) {
+                        error_log("Error fetching image from DB: " . $e->getMessage());
+                    }
                 }
                 
                 if (!empty($featured_image_url)): 
@@ -2030,9 +2064,11 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 <div class="article-featured-image">
                     <img src="<?php echo htmlspecialchars($featured_image_url); ?>" 
                          alt="<?php echo htmlspecialchars($news_item['title']); ?>"
-                         style="max-width: 100%; height: auto; display: block;"
+                         style="max-width: 100%; height: auto; display: block; width: 100%;"
                          onerror="console.error('Image failed to load: <?php echo htmlspecialchars($featured_image_url); ?>'); this.style.display='none';">
                 </div>
+                <?php else: ?>
+                <!-- No featured image available -->
                 <?php endif; ?>
 
                 <?php

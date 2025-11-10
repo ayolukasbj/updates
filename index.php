@@ -2427,58 +2427,6 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
             10. Contact info or footer page
         ============================================== -->
 
-        <!-- 1. Songs Recently Added -->
-        <?php 
-        error_log("DEBUG index.php: new_songs count - " . count($new_songs));
-        if (!empty($new_songs)): ?>
-        <div style="margin: 40px 0;">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-                <h2 style="font-size: 24px; font-weight: 700; color: #2c3e50; margin: 0; padding-bottom: 10px; border-bottom: 3px solid #2196F3;">Featured Music</h2>
-                <a href="songs.php" style="color: #2196F3; text-decoration: none; font-weight: 600; font-size: 14px;">View All ››</a>
-            </div>
-            <div class="songs-recently-added-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px;">
-                <?php foreach (array_slice($new_songs, 0, 12) as $song): ?>
-                <?php
-                // Generate slug if not provided
-                if (!empty($song['slug'])) {
-                    $songUrl = '/song/' . rawurlencode($song['slug']);
-                } else {
-                    $songTitleSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $song['title']));
-                    $songTitleSlug = preg_replace('/\s+/', '-', trim($songTitleSlug));
-                    $songArtistSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $song['artist'] ?? 'unknown-artist'));
-                    $songArtistSlug = preg_replace('/\s+/', '-', trim($songArtistSlug));
-                    $songSlug = $songTitleSlug . '-by-' . $songArtistSlug;
-                    $songUrl = '/song/' . rawurlencode($songSlug);
-                }
-                ?>
-                <a href="<?php echo $songUrl; ?>" style="text-decoration: none; color: inherit; display: block;">
-                <div style="background: white; border-radius: 8px; overflow: hidden; cursor: pointer; transition: all 0.3s; box-shadow: 0 2px 8px rgba(0,0,0,0.05);" onmouseover="this.style.transform='translateY(-3px)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)';">
-                    <div style="height: 200px; overflow: hidden; background: linear-gradient(135deg, #667eea, #764ba2);">
-                        <?php if (!empty($song['cover_art'])): ?>
-                        <img src="<?php echo htmlspecialchars($song['cover_art']); ?>" alt="<?php echo htmlspecialchars($song['title']); ?>" style="width: 100%; height: 100%; object-fit: cover;">
-                        <?php else: ?>
-                        <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-size: 48px;">
-                            <i class="fas fa-music"></i>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                    <div style="padding: 15px;">
-                        <h3 style="font-size: 16px; font-weight: 600; color: #2c3e50; margin: 0 0 5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            <?php echo htmlspecialchars($song['title']); ?>
-                        </h3>
-                        <div style="font-size: 13px; color: #7f8c8d; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                            <?php echo htmlspecialchars($song['artist'] ?? 'Unknown Artist'); ?>
-                        </div>
-                        <div style="font-size: 11px; color: #95a5a6;">
-                            <?php echo number_format($song['plays'] ?? 0); ?> plays
-                        </div>
-                    </div>
-                </div>
-                </a>
-                <?php endforeach; ?>
-            </div>
-        </div>
-        <?php endif; ?>
 
         <!-- 2. Political News -->
         <?php 
