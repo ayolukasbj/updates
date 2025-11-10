@@ -236,29 +236,31 @@ try {
                 exit;
             }
             
-            // Get data from POST
-            $news_id = (int)($_POST['news_id'] ?? 0);
-            $comment = trim($_POST['comment'] ?? '');
-            $name = trim($_POST['name'] ?? '');
-            $email = trim($_POST['email'] ?? '');
-            $website = trim($_POST['website'] ?? '');
+            // Try to get JSON data first, fallback to POST (like song-details.php)
+            $jsonInput = file_get_contents('php://input');
+            $data = !empty($jsonInput) ? json_decode($jsonInput, true) : $_POST;
             
-            // Check if user is logged in
+            // Get data from JSON or POST
+            $news_id = isset($data['news_id']) ? (int)$data['news_id'] : ((int)($_POST['news_id'] ?? $_GET['news_id'] ?? 0));
+            $comment = trim($data['comment'] ?? $_POST['comment'] ?? '');
+            
+            // Check if user is logged in (like song comments API)
             $user_id = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
             
-            // If logged in, get name and email from session/user data
+            if (empty($user_id)) {
+                echo json_encode(['success' => false, 'error' => 'You must be logged in to post comments']);
+                exit;
+            }
+            
+            // Get username from session/user data for logged-in users
+            $username = '';
             if (!empty($user_id)) {
                 try {
-                    $user_stmt = $conn->prepare("SELECT username, email FROM users WHERE id = ?");
+                    $user_stmt = $conn->prepare("SELECT username FROM users WHERE id = ?");
                     $user_stmt->execute([$user_id]);
                     $user_data = $user_stmt->fetch(PDO::FETCH_ASSOC);
                     if ($user_data) {
-                        if (empty($name)) {
-                            $name = $user_data['username'] ?? '';
-                        }
-                        if (empty($email)) {
-                            $email = $user_data['email'] ?? '';
-                        }
+                        $username = $user_data['username'] ?? '';
                     }
                 } catch (Exception $e) {
                     error_log("Error fetching user data: " . $e->getMessage());
@@ -268,16 +270,6 @@ try {
             // Validation
             if (empty($comment)) {
                 echo json_encode(['success' => false, 'error' => 'Comment is required']);
-                exit;
-            }
-            
-            if (empty($name)) {
-                echo json_encode(['success' => false, 'error' => 'Name is required']);
-                exit;
-            }
-            
-            if (empty($email) || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                echo json_encode(['success' => false, 'error' => 'Valid email is required']);
                 exit;
             }
             
@@ -294,60 +286,41 @@ try {
                 exit;
             }
             
-            // Check which columns exist before inserting
-            $col_check = $conn->query("SHOW COLUMNS FROM news_comments");
-            $all_columns = $col_check->fetchAll(PDO::FETCH_COLUMN);
-            $has_name = in_array('name', $all_columns);
-            $has_email = in_array('email', $all_columns);
-            $has_website = in_array('website', $all_columns);
-            $has_is_approved = in_array('is_approved', $all_columns);
-            
-            // Build insert query based on available columns
-            $insert_fields = ['news_id', 'comment'];
-            $insert_values = [$news_id, $comment];
-            
-            if ($has_name) {
-                $insert_fields[] = 'name';
-                $insert_values[] = $name;
-            }
-            if ($has_email) {
-                $insert_fields[] = 'email';
-                $insert_values[] = $email;
-            }
-            if ($has_website && !empty($website)) {
-                $insert_fields[] = 'website';
-                $insert_values[] = $website;
-            }
-            if ($user_id) {
-                $insert_fields[] = 'user_id';
-                $insert_values[] = $user_id;
-            }
-            if ($has_is_approved) {
-                $insert_fields[] = 'is_approved';
-                $insert_values[] = 1;
-            }
-            
-            $fields_str = implode(', ', $insert_fields);
-            $placeholders = implode(', ', array_fill(0, count($insert_values), '?'));
-            
+            // Insert comment (like song comments - simpler structure)
             try {
-                $stmt = $conn->prepare("
-                    INSERT INTO news_comments ($fields_str)
-                    VALUES ($placeholders)
-                ");
+                // Check if name column exists, use it if available
+                $col_check = $conn->query("SHOW COLUMNS FROM news_comments");
+                $all_columns = $col_check->fetchAll(PDO::FETCH_COLUMN);
+                $has_name = in_array('name', $all_columns);
+                $has_is_approved = in_array('is_approved', $all_columns);
+                
+                $insert_fields = ['news_id', 'user_id', 'comment'];
+                $insert_values = [$news_id, $user_id, $comment];
+                
+                if ($has_name && !empty($username)) {
+                    $insert_fields[] = 'name';
+                    $insert_values[] = $username;
+                }
+                
+                if ($has_is_approved) {
+                    $insert_fields[] = 'is_approved';
+                    $insert_values[] = 1;
+                }
+                
+                $fields_str = implode(', ', $insert_fields);
+                $placeholders = implode(', ', array_fill(0, count($insert_values), '?'));
+                
+                $stmt = $conn->prepare("INSERT INTO news_comments ($fields_str) VALUES ($placeholders)");
                 $stmt->execute($insert_values);
                 
                 echo json_encode([
                     'success' => true,
-                    'message' => 'Comment submitted successfully. It will be visible after approval.',
+                    'message' => 'Comment added successfully',
                     'comment_id' => $conn->lastInsertId()
                 ]);
             } catch (Exception $e) {
                 error_log("Comment insertion error: " . $e->getMessage());
-                echo json_encode([
-                    'success' => false,
-                    'error' => 'Error saving comment: ' . $e->getMessage()
-                ]);
+                echo json_encode(['success' => false, 'error' => 'Error saving comment: ' . $e->getMessage()]);
             }
             break;
             

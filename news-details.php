@@ -684,15 +684,19 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
         }
         @media (max-width: 768px) {
             .article-main {
-                padding: 15px 15px;
-                width: 100%;
-                max-width: 100%;
-                margin: 0;
+                padding: 15px 15px !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
             }
         }
         @media (max-width: 480px) {
             .article-main {
-                padding: 10px 10px;
+                padding: 10px 10px !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
             }
         }
         
@@ -1845,133 +1849,34 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     <?php endif; ?>
                 </div>
 
-                <!-- Comments Section -->
-                <div class="comments-section">
-                    <h2 class="comments-title">
-                        <?php echo $comment_count > 0 ? $comment_count . ' ' . ($comment_count == 1 ? 'Comment' : 'Comments') : 'Leave a Reply'; ?>
-                    </h2>
+                <!-- Comments Section (JavaScript-based like song-details.php) -->
+                <div class="comments-section" style="margin-top: 40px; padding: 30px; background: white; border-radius: 10px;">
+                    <h2 class="section-title" style="margin-bottom: 30px; font-size: 24px; font-weight: 700;">Comments</h2>
                     
-                    <!-- Display Existing Comments -->
-                    <?php 
-                    // Debug: Log comment count
-                    error_log("News ID: " . $news_item['id'] . ", Comment count: " . $comment_count . ", Comments array: " . count($news_comments));
-                    
-                    if (!empty($news_comments) && count($news_comments) > 0): ?>
-                    <div class="comments-list" style="margin-bottom: 40px;">
-                        <h3 style="font-size: 20px; margin-bottom: 20px; color: #222;">Comments (<?php echo count($news_comments); ?>)</h3>
-                        <?php foreach ($news_comments as $comment): ?>
-                        <div class="comment-item" style="padding: 20px; margin-bottom: 20px; border-bottom: 1px solid #eee; background: #f9f9f9; border-radius: 4px; width: 100%; max-width: 100%; box-sizing: border-box;">
-                            <div class="comment-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                                <?php if (!empty($comment['avatar'])): ?>
-                                <img src="<?php echo htmlspecialchars($comment['avatar']); ?>" alt="<?php echo htmlspecialchars($comment['display_name'] ?? 'Anonymous'); ?>" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0;">
-                                <?php else: ?>
-                                <div style="width: 40px; height: 40px; border-radius: 50%; background: #e74c3c; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; flex-shrink: 0;">
-                                    <?php echo strtoupper(substr($comment['display_name'] ?? 'A', 0, 1)); ?>
-                                </div>
-                                <?php endif; ?>
-                                <div style="flex: 1; min-width: 0;">
-                                    <strong style="color: #222; font-size: 14px; display: block; word-wrap: break-word;"><?php echo htmlspecialchars($comment['display_name'] ?? 'Anonymous'); ?></strong>
-                                    <div style="font-size: 12px; color: #999;">
-                                        <?php echo !empty($comment['created_at']) ? date('F j, Y \a\t g:i A', strtotime($comment['created_at'])) : 'Recently'; ?>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="comment-content" style="color: #333; line-height: 1.6; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word; width: 100%; max-width: 100%; box-sizing: border-box;">
-                                <?php echo nl2br(htmlspecialchars($comment['comment'] ?? '')); ?>
-                            </div>
+                    <!-- Add Comment Form -->
+                    <?php if ($is_logged_in): ?>
+                    <div class="add-comment-form" style="margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e0e0e0;">
+                        <h3 style="margin-bottom: 15px; font-size: 18px;">Add a Comment</h3>
+                        <div style="margin-bottom: 15px;">
+                            <textarea id="comment-text" placeholder="Write your comment..." rows="4" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; resize: vertical; font-size: 14px; font-family: inherit; box-sizing: border-box;"></textarea>
                         </div>
-                        <?php endforeach; ?>
+                        <button id="submit-comment" style="padding: 10px 20px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 14px;">
+                            Post Comment
+                        </button>
                     </div>
-                    <?php elseif ($comment_count > 0): ?>
-                    <div style="padding: 20px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; margin-bottom: 20px;">
-                        <p style="margin: 0; color: #856404;">Comments are being moderated. Approved comments will appear here.</p>
+                    <?php else: ?>
+                    <div style="margin-bottom: 30px; padding: 20px; background: #fff3cd; border-radius: 8px; border: 1px solid #ffc107; text-align: center;">
+                        <i class="fas fa-lock" style="font-size: 24px; color: #856404; margin-bottom: 10px;"></i>
+                        <p style="color: #856404; margin: 0; font-size: 14px;">
+                            <a href="login.php" style="color: #e74c3c; text-decoration: underline; font-weight: 600;">Login</a> to add comments
+                        </p>
                     </div>
                     <?php endif; ?>
                     
-                    <h3 class="comments-title" style="font-size: 20px; margin-bottom: 20px;">Leave a Reply</h3>
-                    <div class="comment-form">
-                        <p>Your email address will not be published. Required fields are marked <span class="required">*</span></p>
-                        <div id="comment-message" style="display: none; padding: 12px; margin-bottom: 15px; border-radius: 4px;"></div>
-                        <form id="news-comment-form" method="POST" action="api/news-comments.php">
-                            <input type="hidden" name="news_id" value="<?php echo $news_item['id']; ?>">
-                            <div class="form-group">
-                                <label for="comment">Comment <span class="required">*</span></label>
-                                <textarea id="comment" name="comment" required></textarea>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="name">Name <span class="required">*</span></label>
-                                    <input type="text" id="name" name="name" value="<?php echo $is_logged_in ? htmlspecialchars($_SESSION['username'] ?? '') : ''; ?>" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="email">Email <span class="required">*</span></label>
-                                    <input type="email" id="email" name="email" required>
-                                </div>
-                                <div class="form-group">
-                                    <label for="website">Website</label>
-                                    <input type="url" id="website" name="website">
-                                </div>
-                            </div>
-                            <div class="form-checkbox">
-                                <input type="checkbox" id="save-info" name="save_info">
-                                <label for="save-info">Save my name, email, and website in this browser for the next time I comment.</label>
-                            </div>
-                            <button type="submit" class="submit-btn" id="comment-submit-btn">POST COMMENT</button>
-                        </form>
-                        <script>
-                        document.getElementById('news-comment-form').addEventListener('submit', function(e) {
-                            e.preventDefault();
-                            
-                            const form = this;
-                            const submitBtn = document.getElementById('comment-submit-btn');
-                            const messageDiv = document.getElementById('comment-message');
-                            const originalText = submitBtn.textContent;
-                            
-                            // Disable submit button
-                            submitBtn.disabled = true;
-                            submitBtn.textContent = 'Submitting...';
-                            messageDiv.style.display = 'none';
-                            
-                            // Get form data
-                            const formData = new FormData(form);
-                            
-                            // Submit via AJAX
-                            fetch('api/news-comments.php', {
-                                method: 'POST',
-                                body: formData
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.success) {
-                                    messageDiv.style.display = 'block';
-                                    messageDiv.style.backgroundColor = '#d1fae5';
-                                    messageDiv.style.color = '#065f46';
-                                    messageDiv.textContent = data.message || 'Comment submitted successfully! It will be visible after approval.';
-                                    form.reset();
-                                    
-                                    // Reload page after 2 seconds to show new comment
-                                    setTimeout(function() {
-                                        window.location.reload();
-                                    }, 2000);
-                                } else {
-                                    messageDiv.style.display = 'block';
-                                    messageDiv.style.backgroundColor = '#fee2e2';
-                                    messageDiv.style.color = '#991b1b';
-                                    messageDiv.textContent = data.error || 'Error submitting comment. Please try again.';
-                                }
-                            })
-                            .catch(error => {
-                                messageDiv.style.display = 'block';
-                                messageDiv.style.backgroundColor = '#fee2e2';
-                                messageDiv.style.color = '#991b1b';
-                                messageDiv.textContent = 'Network error. Please check your connection and try again.';
-                            })
-                            .finally(() => {
-                                submitBtn.disabled = false;
-                                submitBtn.textContent = originalText;
-                            });
-                        });
-                        </script>
+                    <!-- Comments List -->
+                    <div id="comments-list" style="margin-top: 20px;">
+                        <!-- Comments will be loaded here via JavaScript -->
+                        <div style="text-align: center; color: #999; padding: 20px;">Loading comments...</div>
                     </div>
                 </div>
             </article>
@@ -2151,6 +2056,209 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             </aside>
         </div>
     </div>
+
+    <!-- Comments and Rating JavaScript (like song-details.php) -->
+    <script>
+        (function() {
+            const newsId = <?php echo (int)$news_item['id']; ?>;
+            
+            // Use absolute URL for all API calls
+            let basePath = window.location.pathname;
+            if (basePath.endsWith('.php') || basePath.split('/').pop().includes('.')) {
+                basePath = basePath.substring(0, basePath.lastIndexOf('/') + 1);
+            } else if (!basePath.endsWith('/')) {
+                basePath += '/';
+            }
+            const apiBaseUrl = window.location.origin + basePath;
+            
+            // Load comments
+            function loadComments() {
+                const alternativePaths = [
+                    apiBaseUrl + 'api/news-comments.php',
+                    window.location.origin + '/api/news-comments.php',
+                    'api/news-comments.php'
+                ];
+                
+                function tryLoadComments(urlIndex) {
+                    if (urlIndex >= alternativePaths.length) {
+                        const commentsList = document.getElementById('comments-list');
+                        if (commentsList) {
+                            commentsList.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">Failed to load comments.</div>';
+                        }
+                        return;
+                    }
+                    
+                    const url = alternativePaths[urlIndex] + '?action=list&news_id=' + newsId;
+                    
+                    fetch(url, {
+                        method: 'GET',
+                        mode: 'cors',
+                        cache: 'no-cache'
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            const commentsList = document.getElementById('comments-list');
+                            if (commentsList && data.comments && data.comments.length > 0) {
+                                commentsList.innerHTML = data.comments.map(comment => {
+                                    const date = new Date(comment.created_at);
+                                    const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                                    const avatar = comment.avatar || '';
+                                    const displayName = comment.display_name || comment.name || 'Anonymous';
+                                    const firstLetter = displayName.charAt(0).toUpperCase();
+                                    
+                                    return `
+                                        <div class="comment-item" style="padding: 20px; margin-bottom: 20px; border-bottom: 1px solid #eee; background: #f9f9f9; border-radius: 4px;">
+                                            <div class="comment-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                                                ${avatar ? 
+                                                    `<img src="${avatar}" alt="${displayName}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0;">` :
+                                                    `<div style="width: 40px; height: 40px; border-radius: 50%; background: #e74c3c; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; flex-shrink: 0;">${firstLetter}</div>`
+                                                }
+                                                <div style="flex: 1; min-width: 0;">
+                                                    <div style="font-weight: 600; color: #222; font-size: 14px; word-wrap: break-word;">${displayName}</div>
+                                                    <div style="font-size: 12px; color: #999;">${formattedDate}</div>
+                                                </div>
+                                            </div>
+                                            <div class="comment-text" style="color: #333; line-height: 1.6; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">${(comment.comment || '').replace(/\n/g, '<br>')}</div>
+                                        </div>
+                                    `;
+                                }).join('');
+                            } else if (commentsList) {
+                                commentsList.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">No comments yet. Be the first to comment!</div>';
+                            }
+                        } else {
+                            tryLoadComments(urlIndex + 1);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading comments:', error, 'URL:', url);
+                        tryLoadComments(urlIndex + 1);
+                    });
+                }
+                
+                tryLoadComments(0);
+            }
+            
+            // Check if user is logged in
+            const isLoggedIn = <?php echo $is_logged_in ? 'true' : 'false'; ?>;
+            
+            // Submit comment handler
+            const submitBtn = document.getElementById('submit-comment');
+            if (submitBtn) {
+                submitBtn.addEventListener('click', function() {
+                    if (!isLoggedIn) {
+                        alert('Please login to post comments');
+                        window.location.href = 'login.php';
+                        return;
+                    }
+                    
+                    const commentEl = document.getElementById('comment-text');
+                    const comment = commentEl ? commentEl.value.trim() : '';
+                    
+                    if (!comment) {
+                        alert('Please enter a comment');
+                        return;
+                    }
+                    
+                    this.disabled = true;
+                    this.textContent = 'Posting...';
+                    
+                    const alternativePaths = [
+                        apiBaseUrl + 'api/news-comments.php',
+                        window.location.origin + '/api/news-comments.php',
+                        'api/news-comments.php'
+                    ];
+                    
+                    function tryCommentSubmission(urlIndex) {
+                        if (urlIndex >= alternativePaths.length) {
+                            alert('Failed to post comment. Please try again.');
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Post Comment';
+                            return;
+                        }
+                        
+                        const url = alternativePaths[urlIndex] + '?action=add';
+                        
+                        fetch(url, {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            mode: 'cors',
+                            cache: 'no-cache',
+                            body: JSON.stringify({
+                                news_id: newsId,
+                                comment: comment
+                            })
+                        })
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                            }
+                            return response.json();
+                        })
+                        .then(data => {
+                            if (data && data.success) {
+                                if (commentEl) commentEl.value = '';
+                                setTimeout(function() {
+                                    loadComments();
+                                }, 100);
+                                setTimeout(function() {
+                                    window.location.reload();
+                                }, 500);
+                            } else {
+                                alert(data.error || 'Failed to post comment');
+                                submitBtn.disabled = false;
+                                submitBtn.textContent = 'Post Comment';
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error posting comment:', error);
+                            if (urlIndex < alternativePaths.length - 1) {
+                                tryCommentSubmission(urlIndex + 1);
+                            } else {
+                                alert('Failed to post comment. Please try again.');
+                                submitBtn.disabled = false;
+                                submitBtn.textContent = 'Post Comment';
+                            }
+                        });
+                    }
+                    
+                    tryCommentSubmission(0);
+                });
+            }
+            
+            // Load comments on page load
+            loadComments();
+        })();
+    </script>
+    
+    <script>
+    // Initialize AdSense ads after DOM is ready
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+            if (typeof adsbygoogle !== 'undefined') {
+                try {
+                    var adElements = document.querySelectorAll('.adsbygoogle');
+                    adElements.forEach(function(ad) {
+                        try {
+                            (adsbygoogle = window.adsbygoogle || []).push({});
+                        } catch(e) {
+                            console.log('AdSense push error:', e);
+                        }
+                    });
+                    // Also try to initialize any dynamically inserted ads
+                    (adsbygoogle = window.adsbygoogle || []).push({});
+                } catch(e) {
+                    console.log('AdSense initialization error:', e);
+                }
+            }
+        }, 1000);
+    });
+    </script>
 
     <?php
     // Include footer if exists
