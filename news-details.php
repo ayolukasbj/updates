@@ -251,51 +251,134 @@ try {
 $comment_count = 0;
 $news_comments = [];
 try {
-    // Check if is_approved column exists
-    $col_check = $conn->query("SHOW COLUMNS FROM news_comments LIKE 'is_approved'");
-    $has_is_approved = $col_check->rowCount() > 0;
-    
-    if ($has_is_approved) {
-        $comment_stmt = $conn->prepare("SELECT COUNT(*) as count FROM news_comments WHERE news_id = ? AND is_approved = 1");
-        $comment_stmt->execute([$news_item['id']]);
-        $comment_result = $comment_stmt->fetch(PDO::FETCH_ASSOC);
-        $comment_count = $comment_result['count'] ?? 0;
+    // First check if table exists
+    $table_check = $conn->query("SHOW TABLES LIKE 'news_comments'");
+    if ($table_check->rowCount() > 0) {
+        // Check if is_approved column exists
+        $col_check = $conn->query("SHOW COLUMNS FROM news_comments LIKE 'is_approved'");
+        $has_is_approved = $col_check->rowCount() > 0;
         
-        // Fetch comments
-        $comments_stmt = $conn->prepare("
-            SELECT nc.*, 
-                   COALESCE(u.username, nc.name, 'Anonymous') as display_name,
-                   COALESCE(u.avatar, '') as avatar
-            FROM news_comments nc
-            LEFT JOIN users u ON nc.user_id = u.id
-            WHERE nc.news_id = ? AND nc.is_approved = 1
-            ORDER BY nc.created_at DESC
-        ");
-        $comments_stmt->execute([$news_item['id']]);
-        $news_comments = $comments_stmt->fetchAll(PDO::FETCH_ASSOC);
-    } else {
-        // Fallback without is_approved
-        $comment_stmt = $conn->prepare("SELECT COUNT(*) as count FROM news_comments WHERE news_id = ?");
-        $comment_stmt->execute([$news_item['id']]);
-        $comment_result = $comment_stmt->fetch(PDO::FETCH_ASSOC);
-        $comment_count = $comment_result['count'] ?? 0;
+        // Check if name column exists
+        $name_check = $conn->query("SHOW COLUMNS FROM news_comments LIKE 'name'");
+        $has_name = $name_check->rowCount() > 0;
         
-        $comments_stmt = $conn->prepare("
-            SELECT nc.*, 
-                   COALESCE(u.username, 'Anonymous') as display_name,
-                   COALESCE(u.avatar, '') as avatar
-            FROM news_comments nc
-            LEFT JOIN users u ON nc.user_id = u.id
-            WHERE nc.news_id = ?
-            ORDER BY nc.created_at DESC
-        ");
-        $comments_stmt->execute([$news_item['id']]);
-        $news_comments = $comments_stmt->fetchAll(PDO::FETCH_ASSOC);
+        if ($has_is_approved) {
+            $comment_stmt = $conn->prepare("SELECT COUNT(*) as count FROM news_comments WHERE news_id = ? AND (is_approved = 1 OR is_approved IS NULL)");
+            $comment_stmt->execute([$news_item['id']]);
+            $comment_result = $comment_stmt->fetch(PDO::FETCH_ASSOC);
+            $comment_count = $comment_result['count'] ?? 0;
+            
+            // Fetch comments - try with is_approved first
+            try {
+                if ($has_name) {
+                    $comments_stmt = $conn->prepare("
+                        SELECT nc.*, 
+                               COALESCE(u.username, nc.name, 'Anonymous') as display_name,
+                               COALESCE(u.avatar, '') as avatar
+                        FROM news_comments nc
+                        LEFT JOIN users u ON nc.user_id = u.id
+                        WHERE nc.news_id = ? AND (nc.is_approved = 1 OR nc.is_approved IS NULL)
+                        ORDER BY nc.created_at DESC
+                    ");
+                } else {
+                    $comments_stmt = $conn->prepare("
+                        SELECT nc.*, 
+                               COALESCE(u.username, 'Anonymous') as display_name,
+                               COALESCE(u.avatar, '') as avatar
+                        FROM news_comments nc
+                        LEFT JOIN users u ON nc.user_id = u.id
+                        WHERE nc.news_id = ? AND (nc.is_approved = 1 OR nc.is_approved IS NULL)
+                        ORDER BY nc.created_at DESC
+                    ");
+                }
+                $comments_stmt->execute([$news_item['id']]);
+                $news_comments = $comments_stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Exception $e) {
+                // Fallback without is_approved filter
+                error_log("Comments query with is_approved failed: " . $e->getMessage());
+                if ($has_name) {
+                    $comments_stmt = $conn->prepare("
+                        SELECT nc.*, 
+                               COALESCE(u.username, nc.name, 'Anonymous') as display_name,
+                               COALESCE(u.avatar, '') as avatar
+                        FROM news_comments nc
+                        LEFT JOIN users u ON nc.user_id = u.id
+                        WHERE nc.news_id = ?
+                        ORDER BY nc.created_at DESC
+                    ");
+                } else {
+                    $comments_stmt = $conn->prepare("
+                        SELECT nc.*, 
+                               COALESCE(u.username, 'Anonymous') as display_name,
+                               COALESCE(u.avatar, '') as avatar
+                        FROM news_comments nc
+                        LEFT JOIN users u ON nc.user_id = u.id
+                        WHERE nc.news_id = ?
+                        ORDER BY nc.created_at DESC
+                    ");
+                }
+                $comments_stmt->execute([$news_item['id']]);
+                $news_comments = $comments_stmt->fetchAll(PDO::FETCH_ASSOC);
+                $comment_count = count($news_comments);
+            }
+        } else {
+            // Fallback without is_approved
+            $comment_stmt = $conn->prepare("SELECT COUNT(*) as count FROM news_comments WHERE news_id = ?");
+            $comment_stmt->execute([$news_item['id']]);
+            $comment_result = $comment_stmt->fetch(PDO::FETCH_ASSOC);
+            $comment_count = $comment_result['count'] ?? 0;
+            
+            if ($has_name) {
+                $comments_stmt = $conn->prepare("
+                    SELECT nc.*, 
+                           COALESCE(u.username, nc.name, 'Anonymous') as display_name,
+                           COALESCE(u.avatar, '') as avatar
+                    FROM news_comments nc
+                    LEFT JOIN users u ON nc.user_id = u.id
+                    WHERE nc.news_id = ?
+                    ORDER BY nc.created_at DESC
+                ");
+            } else {
+                $comments_stmt = $conn->prepare("
+                    SELECT nc.*, 
+                           COALESCE(u.username, 'Anonymous') as display_name,
+                           COALESCE(u.avatar, '') as avatar
+                    FROM news_comments nc
+                    LEFT JOIN users u ON nc.user_id = u.id
+                    WHERE nc.news_id = ?
+                    ORDER BY nc.created_at DESC
+                ");
+            }
+            $comments_stmt->execute([$news_item['id']]);
+            $news_comments = $comments_stmt->fetchAll(PDO::FETCH_ASSOC);
+        }
     }
 } catch (Exception $e) {
     error_log('Error fetching comments: ' . $e->getMessage());
+    error_log('Stack trace: ' . $e->getTraceAsString());
     $comment_count = 0;
     $news_comments = [];
+    
+    // Last resort: Try a simple query without any joins
+    try {
+        $simple_stmt = $conn->prepare("SELECT * FROM news_comments WHERE news_id = ? ORDER BY created_at DESC");
+        $simple_stmt->execute([$news_item['id']]);
+        $news_comments = $simple_stmt->fetchAll(PDO::FETCH_ASSOC);
+        $comment_count = count($news_comments);
+        
+        // Process comments to add display_name
+        foreach ($news_comments as &$comment) {
+            if (empty($comment['display_name'])) {
+                $comment['display_name'] = $comment['name'] ?? $comment['username'] ?? 'Anonymous';
+            }
+            if (empty($comment['avatar'])) {
+                $comment['avatar'] = '';
+            }
+        }
+        unset($comment); // Break reference
+    } catch (Exception $e2) {
+        error_log('Simple comments query also failed: ' . $e2->getMessage());
+    }
 }
 
 // Function to insert ads after every 4 paragraphs
@@ -304,22 +387,44 @@ function insertAdsInContent($content, $adCode) {
         return $content;
     }
     
-    // Split content by paragraph tags
-    $paragraphs = preg_split('/(<\/p>)/i', $content, -1, PREG_SPLIT_DELIM_CAPTURE);
+    // Wrap ad code in a container div for styling
+    $wrappedAd = '<div class="in-article-ad" style="margin: 30px auto; text-align: center; padding: 20px; background: #f9f9f9; border-radius: 4px; width: 100%; max-width: 100%; box-sizing: border-box; overflow: hidden;">' . $adCode . '</div>';
+    
+    // Split content by paragraph tags - handle both <p> and <p ...>
+    // Use a more robust regex to catch all paragraph endings
+    $paragraphs = preg_split('/(<\/p\s*>)/i', $content, -1, PREG_SPLIT_DELIM_CAPTURE);
     
     $result = '';
     $paragraphCount = 0;
+    $totalParts = count($paragraphs);
     
     foreach ($paragraphs as $index => $part) {
         $result .= $part;
         
-        // Check if this is a closing </p> tag
-        if (stripos($part, '</p>') !== false) {
+        // Check if this is a closing </p> tag (case insensitive)
+        if (preg_match('/<\/p\s*>/i', $part)) {
             $paragraphCount++;
             
-            // Insert ad after every 4 paragraphs
-            if ($paragraphCount % 4 == 0 && $index < count($paragraphs) - 1) {
-                $result .= '<div class="in-article-ad" style="margin: 30px 0; text-align: center; padding: 20px; background: #f9f9f9; border-radius: 4px;">' . $adCode . '</div>';
+            // Insert ad after every 4 paragraphs (after 4th, 8th, 12th, etc.)
+            // Don't insert after the last paragraph
+            if ($paragraphCount % 4 == 0 && $index < $totalParts - 2) {
+                $result .= $wrappedAd;
+            }
+        }
+    }
+    
+    // If no paragraphs were found, try splitting by double line breaks
+    if ($paragraphCount == 0) {
+        $lines = preg_split('/(\n\s*\n)/', $content, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $lineCount = 0;
+        $result = '';
+        foreach ($lines as $idx => $line) {
+            $result .= $line;
+            if (preg_match('/\n\s*\n/', $line)) {
+                $lineCount++;
+                if ($lineCount % 4 == 0 && $idx < count($lines) - 2) {
+                    $result .= $wrappedAd;
+                }
             }
         }
     }
@@ -1471,16 +1576,16 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             }
         }
         
-        /* Ensure no element can cause horizontal scroll */
+        /* Ensure no element can cause horizontal scroll - EQUAL PADDING */
         @media (max-width: 480px) {
             .main-content {
-                padding: 10px;
+                padding: 10px 10px !important;
             }
             .article-main {
-                padding: 10px;
+                padding: 10px 10px !important;
             }
             .article-body {
-                padding: 0;
+                padding: 0 !important;
             }
             .article-body p,
             .article-body h2,
@@ -1488,12 +1593,37 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
             .article-body blockquote,
             .article-body ul,
             .article-body ol {
-                max-width: 100%;
-                word-wrap: break-word;
-                overflow-wrap: break-word;
+                max-width: 100% !important;
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+                padding-left: 0 !important;
+                padding-right: 0 !important;
             }
         }
     </style>
+    <script>
+    // Initialize AdSense ads after page loads
+    window.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+            if (typeof adsbygoogle !== 'undefined') {
+                try {
+                    var adElements = document.querySelectorAll('.adsbygoogle');
+                    adElements.forEach(function(ad) {
+                        try {
+                            (adsbygoogle = window.adsbygoogle || []).push({});
+                        } catch(e) {
+                            console.log('AdSense push error:', e);
+                        }
+                    });
+                } catch(e) {
+                    console.log('AdSense initialization error:', e);
+                }
+            }
+        }, 500);
+    });
+    </script>
 </head>
 <body>
     <?php
@@ -1605,19 +1735,18 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 <?php endif; ?>
 
                 <!-- Article Body -->
-                <div class="article-body" style="width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; word-wrap: break-word !important; overflow-wrap: break-word !important; word-break: break-word !important;">
-                    <div style="width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; word-wrap: break-word !important; overflow-wrap: break-word !important; word-break: break-word !important;">
-                        <?php 
-                        // Get ad code for in-article ads
-                        $in_article_ad = '';
-                        if (function_exists('displayAd')) {
-                            $in_article_ad = displayAd('news_in_article');
-                        }
-                        // Insert ads after every 4 paragraphs
-                        $content_with_ads = insertAdsInContent($news_item['content'], $in_article_ad);
-                        echo $content_with_ads; 
-                        ?>
-                    </div>
+                <div class="article-body">
+                    <?php 
+                    // Get ad code for in-article ads
+                    $in_article_ad = '';
+                    if (function_exists('displayAd')) {
+                        $in_article_ad = displayAd('news_in_article');
+                    }
+                    // Insert ads after every 4 paragraphs
+                    $content_with_ads = insertAdsInContent($news_item['content'], $in_article_ad);
+                    // Output content directly (already HTML from database)
+                    echo $content_with_ads;
+                    ?>
                 </div>
 
                 <!-- Tags -->
@@ -1723,30 +1852,39 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     </h2>
                     
                     <!-- Display Existing Comments -->
-                    <?php if (!empty($news_comments)): ?>
+                    <?php 
+                    // Debug: Log comment count
+                    error_log("News ID: " . $news_item['id'] . ", Comment count: " . $comment_count . ", Comments array: " . count($news_comments));
+                    
+                    if (!empty($news_comments) && count($news_comments) > 0): ?>
                     <div class="comments-list" style="margin-bottom: 40px;">
+                        <h3 style="font-size: 20px; margin-bottom: 20px; color: #222;">Comments (<?php echo count($news_comments); ?>)</h3>
                         <?php foreach ($news_comments as $comment): ?>
-                        <div class="comment-item" style="padding: 20px; margin-bottom: 20px; border-bottom: 1px solid #eee; background: #f9f9f9; border-radius: 4px;">
+                        <div class="comment-item" style="padding: 20px; margin-bottom: 20px; border-bottom: 1px solid #eee; background: #f9f9f9; border-radius: 4px; width: 100%; max-width: 100%; box-sizing: border-box;">
                             <div class="comment-header" style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
                                 <?php if (!empty($comment['avatar'])): ?>
-                                <img src="<?php echo htmlspecialchars($comment['avatar']); ?>" alt="<?php echo htmlspecialchars($comment['display_name']); ?>" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                                <img src="<?php echo htmlspecialchars($comment['avatar']); ?>" alt="<?php echo htmlspecialchars($comment['display_name'] ?? 'Anonymous'); ?>" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0;">
                                 <?php else: ?>
-                                <div style="width: 40px; height: 40px; border-radius: 50%; background: #e74c3c; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold;">
-                                    <?php echo strtoupper(substr($comment['display_name'], 0, 1)); ?>
+                                <div style="width: 40px; height: 40px; border-radius: 50%; background: #e74c3c; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; flex-shrink: 0;">
+                                    <?php echo strtoupper(substr($comment['display_name'] ?? 'A', 0, 1)); ?>
                                 </div>
                                 <?php endif; ?>
-                                <div>
-                                    <strong style="color: #222; font-size: 14px;"><?php echo htmlspecialchars($comment['display_name']); ?></strong>
+                                <div style="flex: 1; min-width: 0;">
+                                    <strong style="color: #222; font-size: 14px; display: block; word-wrap: break-word;"><?php echo htmlspecialchars($comment['display_name'] ?? 'Anonymous'); ?></strong>
                                     <div style="font-size: 12px; color: #999;">
-                                        <?php echo date('F j, Y \a\t g:i A', strtotime($comment['created_at'])); ?>
+                                        <?php echo !empty($comment['created_at']) ? date('F j, Y \a\t g:i A', strtotime($comment['created_at'])) : 'Recently'; ?>
                                     </div>
                                 </div>
                             </div>
-                            <div class="comment-content" style="color: #333; line-height: 1.6; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word;">
-                                <?php echo nl2br(htmlspecialchars($comment['comment'])); ?>
+                            <div class="comment-content" style="color: #333; line-height: 1.6; font-size: 14px; word-wrap: break-word; overflow-wrap: break-word; width: 100%; max-width: 100%; box-sizing: border-box;">
+                                <?php echo nl2br(htmlspecialchars($comment['comment'] ?? '')); ?>
                             </div>
                         </div>
                         <?php endforeach; ?>
+                    </div>
+                    <?php elseif ($comment_count > 0): ?>
+                    <div style="padding: 20px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; margin-bottom: 20px;">
+                        <p style="margin: 0; color: #856404;">Comments are being moderated. Approved comments will appear here.</p>
                     </div>
                     <?php endif; ?>
                     
