@@ -2245,21 +2245,21 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                         <?php foreach (array_slice($related_news, 0, 6) as $related): ?>
                         <div class="related-post-item">
                             <?php
-                            // Get image URL with proper fallback order - prioritize actual image field
-                            $related_image_url = '';
-                            // First check the actual image field (most reliable)
-                            if (!empty($related['image'])) {
-                                $related_image_url = asset_path($related['image']);
-                            } elseif (!empty($related['featured_image'])) {
-                                $related_image_url = asset_path($related['featured_image']);
-                            } elseif (!empty($related['display_image'])) {
-                                $related_image_url = asset_path($related['display_image']);
+                            // Get image URL - use same logic as homepage slider (direct image field)
+                            $related_image = '';
+                            // Use image field directly (same as homepage slider)
+                            if (!empty($related['image']) && trim($related['image']) !== '') {
+                                $related_image = trim($related['image']);
+                            } elseif (!empty($related['featured_image']) && trim($related['featured_image']) !== '') {
+                                $related_image = trim($related['featured_image']);
+                            } elseif (!empty($related['display_image']) && trim($related['display_image']) !== '') {
+                                $related_image = trim($related['display_image']);
                             }
                             ?>
-                            <?php if (!empty($related_image_url)): ?>
+                            <?php if (!empty($related_image)): ?>
                             <div class="related-post-thumb">
                                 <a href="<?php echo !empty($related['slug']) ? 'news-details.php?slug=' . urlencode($related['slug']) : 'news-details.php?id=' . $related['id']; ?>">
-                                    <img src="<?php echo htmlspecialchars($related_image_url); ?>" 
+                                    <img src="<?php echo htmlspecialchars($related_image); ?>" 
                                          alt="<?php echo htmlspecialchars($related['title']); ?>"
                                          style="width: 100%; height: 100%; object-fit: cover; display: block;"
                                          onerror="this.onerror=null; this.style.display='none'; this.parentElement.parentElement.innerHTML='<div style=\'display: flex; align-items: center; justify-content: center; color: #ccc; height: 100%; background: #f5f5f5;\'><i class=\'fas fa-newspaper\' style=\'font-size: 50px;\'></i></div>';">
@@ -2442,19 +2442,19 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                         <div class="recent-featured-thumb">
                             <a href="<?php echo !empty($first_news['slug']) ? 'news-details.php?slug=' . urlencode($first_news['slug']) : 'news-details.php?id=' . $first_news['id']; ?>">
                                 <?php
-                                // Get image URL with proper fallback order - prioritize actual image field
-                                $first_news_image_url = '';
-                                // First check the actual image field (most reliable)
-                                if (!empty($first_news['image'])) {
-                                    $first_news_image_url = asset_path($first_news['image']);
-                                } elseif (!empty($first_news['featured_image'])) {
-                                    $first_news_image_url = asset_path($first_news['featured_image']);
-                                } elseif (!empty($first_news['display_image'])) {
-                                    $first_news_image_url = asset_path($first_news['display_image']);
+                                // Get image URL - use same logic as homepage slider (direct image field)
+                                $first_news_image = '';
+                                // Use image field directly (same as homepage slider)
+                                if (!empty($first_news['image']) && trim($first_news['image']) !== '') {
+                                    $first_news_image = trim($first_news['image']);
+                                } elseif (!empty($first_news['featured_image']) && trim($first_news['featured_image']) !== '') {
+                                    $first_news_image = trim($first_news['featured_image']);
+                                } elseif (!empty($first_news['display_image']) && trim($first_news['display_image']) !== '') {
+                                    $first_news_image = trim($first_news['display_image']);
                                 }
                                 ?>
-                                <?php if (!empty($first_news_image_url)): ?>
-                                <img src="<?php echo htmlspecialchars($first_news_image_url); ?>" 
+                                <?php if (!empty($first_news_image)): ?>
+                                <img src="<?php echo htmlspecialchars($first_news_image); ?>" 
                                      alt="<?php echo htmlspecialchars($first_news['title']); ?>"
                                      onerror="this.onerror=null; this.style.display='none'; this.parentElement.innerHTML='<div style=\'width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #eee; color: #999;\'><i class=\'fas fa-newspaper\' style=\'font-size: 50px;\'></i></div>';">
                                 <?php else: ?>
@@ -2480,21 +2480,21 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                         <?php foreach (array_slice($latest_news, 1, 5) as $latest): ?>
                         <li class="widget-post-item">
                             <?php
-                            // Get image URL with proper fallback order - prioritize actual image field
-                            $latest_image_url = '';
-                            // First check the actual image field (most reliable)
-                            if (!empty($latest['image'])) {
-                                $latest_image_url = asset_path($latest['image']);
-                            } elseif (!empty($latest['featured_image'])) {
-                                $latest_image_url = asset_path($latest['featured_image']);
-                            } elseif (!empty($latest['display_image'])) {
-                                $latest_image_url = asset_path($latest['display_image']);
+                            // Get image URL - use same logic as homepage slider (direct image field)
+                            $latest_image = '';
+                            // Use image field directly (same as homepage slider)
+                            if (!empty($latest['image']) && trim($latest['image']) !== '') {
+                                $latest_image = trim($latest['image']);
+                            } elseif (!empty($latest['featured_image']) && trim($latest['featured_image']) !== '') {
+                                $latest_image = trim($latest['featured_image']);
+                            } elseif (!empty($latest['display_image']) && trim($latest['display_image']) !== '') {
+                                $latest_image = trim($latest['display_image']);
                             }
                             ?>
-                            <?php if (!empty($latest_image_url)): ?>
+                            <?php if (!empty($latest_image)): ?>
                             <div class="widget-post-thumb">
                                 <a href="<?php echo !empty($latest['slug']) ? 'news-details.php?slug=' . urlencode($latest['slug']) : 'news-details.php?id=' . $latest['id']; ?>">
-                                    <img src="<?php echo htmlspecialchars($latest_image_url); ?>" 
+                                    <img src="<?php echo htmlspecialchars($latest_image); ?>" 
                                          alt="<?php echo htmlspecialchars($latest['title']); ?>"
                                          onerror="this.onerror=null; this.style.display='none'; this.parentElement.parentElement.innerHTML='<div style=\'display: flex; align-items: center; justify-content: center; color: #ccc;\'><i class=\'fas fa-newspaper\'></i></div>';">
                                 </a>
