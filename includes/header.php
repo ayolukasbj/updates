@@ -197,45 +197,61 @@ function getHeaderSetting($key, $default = '') {
 $site_name = getHeaderSetting('site_name', defined('SITE_NAME') ? SITE_NAME : '');
 $show_site_name = getHeaderSetting('show_site_name', '1');
 
-// Check if logo was preloaded (from news-details.php or other pages)
+// Get logo - use SettingsManager if available (like homepage), otherwise use direct query
+$site_logo = '';
 if (!empty($GLOBALS['site_logo_preloaded'])) {
     $site_logo = $GLOBALS['site_logo_preloaded'];
 } else {
-    // Get logo from database (same as artist-profile-mobile.php)
-    $site_logo = '';
-    try {
-        global $conn;
-        if (!$conn) {
-            require_once __DIR__ . '/../config/database.php';
-            $db = new Database();
-            $conn = $db->getConnection();
+    // Try SettingsManager first (same as homepage)
+    if (file_exists(__DIR__ . '/settings.php')) {
+        require_once __DIR__ . '/settings.php';
+        if (class_exists('SettingsManager')) {
+            $site_logo = SettingsManager::getSiteLogo();
         }
-        if ($conn) {
-            $logoStmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'site_logo'");
-            $logoStmt->execute();
-            $logo_result = $logoStmt->fetch(PDO::FETCH_ASSOC);
-            if ($logo_result && !empty($logo_result['setting_value'])) {
-                $site_logo = $logo_result['setting_value'];
-                // Normalize logo path (same as artist-profile-mobile.php)
-                $normalizedLogo = str_replace('\\', '/', $site_logo);
-                $normalizedLogo = preg_replace('#^\.\./#', '', $normalizedLogo);
-                $normalizedLogo = str_replace('../', '', $normalizedLogo);
-                
-                // Build full URL if needed (same as artist-profile-mobile.php)
-                if (!empty($normalizedLogo) && strpos($normalizedLogo, 'http') !== 0) {
-                    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
-                    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-                    $base_path = defined('BASE_PATH') ? BASE_PATH : '/';
-                    $baseUrl = $protocol . $host . $base_path;
-                    $site_logo = $baseUrl . ltrim($normalizedLogo, '/');
-                } else {
-                    $site_logo = $normalizedLogo;
+    }
+    
+    // If SettingsManager didn't work or returned empty, try direct database query
+    if (empty($site_logo)) {
+        try {
+            global $conn;
+            if (!$conn) {
+                require_once __DIR__ . '/../config/database.php';
+                $db = new Database();
+                $conn = $db->getConnection();
+            }
+            if ($conn) {
+                $logoStmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'site_logo'");
+                $logoStmt->execute();
+                $logo_result = $logoStmt->fetch(PDO::FETCH_ASSOC);
+                if ($logo_result && !empty($logo_result['setting_value'])) {
+                    $site_logo = $logo_result['setting_value'];
                 }
             }
+        } catch (Exception $e) {
+            error_log("Error getting logo in header.php: " . $e->getMessage());
         }
-    } catch (Exception $e) {
-        error_log("Error getting logo in header.php: " . $e->getMessage());
-        $site_logo = '';
+    }
+    
+    // Normalize and build full URL for logo (same as artist-profile-mobile.php)
+    if (!empty($site_logo)) {
+        // Normalize logo path
+        $normalizedLogo = str_replace('\\', '/', $site_logo);
+        $normalizedLogo = preg_replace('#^\.\./#', '', $normalizedLogo);
+        $normalizedLogo = str_replace('../', '', $normalizedLogo);
+        
+        // Build full URL if needed (not already absolute)
+        if (strpos($normalizedLogo, 'http://') !== 0 && strpos($normalizedLogo, 'https://') !== 0) {
+            $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $base_path = defined('BASE_PATH') ? BASE_PATH : '/';
+            if ($base_path !== '/' && substr($base_path, -1) !== '/') {
+                $base_path .= '/';
+            }
+            $baseUrl = $protocol . $host . $base_path;
+            $site_logo = $baseUrl . ltrim($normalizedLogo, '/');
+        } else {
+            $site_logo = $normalizedLogo;
+        }
     }
 }
 
@@ -833,17 +849,17 @@ if (function_exists('renderThemeStyles')) {
         
         <a href="index.php" class="logo">
             <?php 
-            // Always try to show logo if available (same logic as artist-profile-mobile.php)
+            // Always try to show logo if available
             $logoDisplayed = false;
             
-            // $site_logo is already normalized and has full URL from getHeaderSetting or preloaded
-            if (!empty($site_logo) && trim($site_logo) !== '' && strpos($site_logo, 'http') !== false):
+            // Show logo if it exists and is not empty (don't require 'http' check - logo is already a full URL)
+            if (!empty($site_logo) && trim($site_logo) !== ''):
                 $logoDisplayed = true;
             ?>
                 <img src="<?php echo htmlspecialchars($site_logo); ?>" 
                      alt="<?php echo htmlspecialchars($site_name ?: (defined('SITE_NAME') ? SITE_NAME : '')); ?>" 
                      style="width: 32px; height: 32px; object-fit: contain; display: block;"
-                     onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='block';">
+                     onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='block'; this.nextElementSibling.style.display='flex';">
             <?php endif; ?>
             <?php if (!$logoDisplayed): ?>
                 <i class="fas fa-music"></i>
