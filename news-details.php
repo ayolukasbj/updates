@@ -482,14 +482,38 @@ try {
 // Get related news (for Similar News section)
 $related_news = [];
 try {
-    $related_stmt = $conn->prepare("
-        SELECT n.*, COALESCE(u.username, 'Unknown') as author 
-        FROM news n 
-        LEFT JOIN users u ON n.author_id = u.id 
-        WHERE n.category = ? AND n.id != ? AND n.is_published = 1 
-        ORDER BY n.created_at DESC 
-        LIMIT 6
-    ");
+    // Check if featured_image column exists for related news query
+    $has_featured_image_col = false;
+    try {
+        $col_check = $conn->query("SHOW COLUMNS FROM news LIKE 'featured_image'");
+        $has_featured_image_col = $col_check->rowCount() > 0;
+    } catch (Exception $e) {
+        $has_featured_image_col = false;
+    }
+    
+    if ($has_featured_image_col) {
+        $related_stmt = $conn->prepare("
+            SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                   COALESCE(n.featured_image, n.image) as display_image,
+                   n.featured_image,
+                   n.image
+            FROM news n 
+            LEFT JOIN users u ON n.author_id = u.id 
+            WHERE n.category = ? AND n.id != ? AND n.is_published = 1 
+            ORDER BY n.created_at DESC 
+            LIMIT 6
+        ");
+    } else {
+        $related_stmt = $conn->prepare("
+            SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                   n.image as display_image
+            FROM news n 
+            LEFT JOIN users u ON n.author_id = u.id 
+            WHERE n.category = ? AND n.id != ? AND n.is_published = 1 
+            ORDER BY n.created_at DESC 
+            LIMIT 6
+        ");
+    }
     $related_stmt->execute([$news_item['category'] ?? 'News', $news_item['id']]);
     $related_news = $related_stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
@@ -499,27 +523,123 @@ try {
 // Get latest news for sidebar (first one large, rest as list)
 $latest_news = [];
 try {
-    $latest_stmt = $conn->prepare("
-        SELECT n.*, COALESCE(u.username, 'Unknown') as author 
-        FROM news n 
-        LEFT JOIN users u ON n.author_id = u.id 
-        WHERE n.is_published = 1 AND n.id != ?
-        ORDER BY n.created_at DESC 
-        LIMIT 6
-    ");
+    // Check if featured_image column exists for latest news query
+    $has_featured_image_col = false;
+    try {
+        $col_check = $conn->query("SHOW COLUMNS FROM news LIKE 'featured_image'");
+        $has_featured_image_col = $col_check->rowCount() > 0;
+    } catch (Exception $e) {
+        $has_featured_image_col = false;
+    }
+    
+    if ($has_featured_image_col) {
+        $latest_stmt = $conn->prepare("
+            SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                   COALESCE(n.featured_image, n.image) as display_image,
+                   n.featured_image,
+                   n.image
+            FROM news n 
+            LEFT JOIN users u ON n.author_id = u.id 
+            WHERE n.is_published = 1 AND n.id != ?
+            ORDER BY n.created_at DESC 
+            LIMIT 6
+        ");
+    } else {
+        $latest_stmt = $conn->prepare("
+            SELECT n.*, COALESCE(u.username, 'Unknown') as author,
+                   n.image as display_image
+            FROM news n 
+            LEFT JOIN users u ON n.author_id = u.id 
+            WHERE n.is_published = 1 AND n.id != ?
+            ORDER BY n.created_at DESC 
+            LIMIT 6
+        ");
+    }
     $latest_stmt->execute([$news_item['id']]);
     $latest_news = $latest_stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (Exception $e) {
     error_log('Error fetching latest news: ' . $e->getMessage());
 }
 
-// Helper function for asset paths
+// Helper function for asset paths (matches song-details.php logic)
 if (!function_exists('asset_path')) {
     function asset_path($path) {
         if (empty($path)) return '';
-        if (strpos($path, 'http') === 0) return $path;
-        $base = defined('SITE_URL') ? rtrim(SITE_URL, '/') : '';
-        return $base . '/' . ltrim($path, '/');
+        
+        // If already absolute URL, return as is (but upgrade HTTP to HTTPS if needed)
+        if (strpos($path, 'http://') === 0 || strpos($path, 'https://') === 0) {
+            // If we're on HTTPS, upgrade HTTP URLs to HTTPS
+            $isHttps = false;
+            if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+                $isHttps = true;
+            } elseif (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+                $isHttps = true;
+            } elseif (!empty($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) {
+                $isHttps = true;
+            } elseif (!empty($_SERVER['REQUEST_SCHEME']) && $_SERVER['REQUEST_SCHEME'] === 'https') {
+                $isHttps = true;
+            }
+            
+            if ($isHttps && strpos($path, 'http://') === 0) {
+                return str_replace('http://', 'https://', $path);
+            }
+            return $path;
+        }
+        
+        // Get base URL - properly detect HTTPS for ngrok/proxy
+        $protocol = 'http://';
+        if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+            $protocol = 'https://';
+        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+            $protocol = 'https://';
+        } elseif (!empty($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443) {
+            $protocol = 'https://';
+        } elseif (!empty($_SERVER['REQUEST_SCHEME']) && $_SERVER['REQUEST_SCHEME'] === 'https') {
+            $protocol = 'https://';
+        }
+        
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+        $baseUrl = $protocol . $host;
+        
+        // Use SITE_URL if defined (it should already include protocol, host, and path)
+        if (defined('SITE_URL') && !empty(SITE_URL)) {
+            $siteUrl = rtrim(SITE_URL, '/');
+            
+            // If path starts with /, append directly to SITE_URL
+            if (strpos($path, '/') === 0) {
+                return $siteUrl . $path;
+            }
+            
+            // Remove any '../' prefixes
+            $cleanPath = ltrim($path, '../');
+            $cleanPath = ltrim($cleanPath, '/');
+            
+            // Append path to SITE_URL
+            return $siteUrl . '/' . $cleanPath;
+        }
+        
+        // If SITE_URL not defined, use BASE_PATH if available
+        $base_path = defined('BASE_PATH') ? BASE_PATH : '/';
+        
+        // Ensure base_path is properly formatted
+        if ($base_path !== '/' && substr($base_path, -1) !== '/') {
+            $base_path .= '/';
+        }
+        if ($base_path !== '/' && substr($base_path, 0, 1) !== '/') {
+            $base_path = '/' . $base_path;
+        }
+        
+        // If path starts with /, make it absolute URL
+        if (strpos($path, '/') === 0) {
+            return $baseUrl . $path;
+        }
+        
+        // Otherwise, make it absolute using base path
+        // Remove any '../' prefixes
+        $cleanPath = ltrim($path, '../');
+        $cleanPath = ltrim($cleanPath, '/');
+        
+        return $baseUrl . $base_path . $cleanPath;
     }
 }
 
@@ -1895,24 +2015,23 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
 
                 <!-- Featured Image -->
                 <?php 
-                // Get featured image - match homepage logic exactly
-                // Homepage uses: $carousel_news['image'] directly
-                // Since we use SELECT n.*, we have access to both 'image' and 'featured_image' fields
-                // Use the same logic as homepage: check 'image' field directly
-                if (!empty($news_item['image'])): 
+                // Get featured image - use asset_path for consistent URL generation
+                $featured_image_url = '';
+                if (!empty($news_item['image'])) {
+                    $featured_image_url = asset_path($news_item['image']);
+                } elseif (!empty($news_item['featured_image'])) {
+                    $featured_image_url = asset_path($news_item['featured_image']);
+                } elseif (!empty($news_item['display_image'])) {
+                    $featured_image_url = asset_path($news_item['display_image']);
+                }
+                
+                if (!empty($featured_image_url)): 
                 ?>
                 <div class="article-featured-image">
-                    <img src="<?php echo htmlspecialchars($news_item['image']); ?>" 
+                    <img src="<?php echo htmlspecialchars($featured_image_url); ?>" 
                          alt="<?php echo htmlspecialchars($news_item['title']); ?>"
                          style="max-width: 100%; height: auto; display: block;"
-                         onerror="console.error('Image failed to load: <?php echo htmlspecialchars($news_item['image']); ?>'); this.style.display='none';">
-                </div>
-                <?php elseif (!empty($news_item['featured_image'])): ?>
-                <div class="article-featured-image">
-                    <img src="<?php echo htmlspecialchars($news_item['featured_image']); ?>" 
-                         alt="<?php echo htmlspecialchars($news_item['title']); ?>"
-                         style="max-width: 100%; height: auto; display: block;"
-                         onerror="console.error('Image failed to load: <?php echo htmlspecialchars($news_item['featured_image']); ?>'); this.style.display='none';">
+                         onerror="console.error('Image failed to load: <?php echo htmlspecialchars($featured_image_url); ?>'); this.style.display='none';">
                 </div>
                 <?php endif; ?>
 
@@ -2004,11 +2123,23 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     <div class="related-grid">
                         <?php foreach (array_slice($related_news, 0, 6) as $related): ?>
                         <div class="related-post-item">
-                            <?php if (!empty($related['featured_image']) || !empty($related['image'])): ?>
+                            <?php
+                            // Get image URL with proper fallback order
+                            $related_image_url = '';
+                            if (!empty($related['display_image'])) {
+                                $related_image_url = asset_path($related['display_image']);
+                            } elseif (!empty($related['featured_image'])) {
+                                $related_image_url = asset_path($related['featured_image']);
+                            } elseif (!empty($related['image'])) {
+                                $related_image_url = asset_path($related['image']);
+                            }
+                            ?>
+                            <?php if (!empty($related_image_url)): ?>
                             <div class="related-post-thumb">
                                 <a href="<?php echo !empty($related['slug']) ? 'news-details.php?slug=' . urlencode($related['slug']) : 'news-details.php?id=' . $related['id']; ?>">
-                                    <img src="<?php echo htmlspecialchars(asset_path($related['featured_image'] ?? $related['image'])); ?>" 
-                                         alt="<?php echo htmlspecialchars($related['title']); ?>">
+                                    <img src="<?php echo htmlspecialchars($related_image_url); ?>" 
+                                         alt="<?php echo htmlspecialchars($related['title']); ?>"
+                                         onerror="this.onerror=null; this.style.display='none'; this.parentElement.parentElement.innerHTML='<div style=\'display: flex; align-items: center; justify-content: center; color: #ccc; height: 100%;\'><i class=\'fas fa-newspaper\' style=\'font-size: 50px;\'></i></div>';">
                                     <?php if (!empty($related['category'])): ?>
                                     <span class="related-post-category"><?php echo htmlspecialchars($related['category']); ?></span>
                                     <?php endif; ?>
@@ -2187,9 +2318,21 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     <div class="recent-featured">
                         <div class="recent-featured-thumb">
                             <a href="<?php echo !empty($first_news['slug']) ? 'news-details.php?slug=' . urlencode($first_news['slug']) : 'news-details.php?id=' . $first_news['id']; ?>">
-                                <?php if (!empty($first_news['featured_image']) || !empty($first_news['image'])): ?>
-                                <img src="<?php echo htmlspecialchars(asset_path($first_news['featured_image'] ?? $first_news['image'])); ?>" 
-                                     alt="<?php echo htmlspecialchars($first_news['title']); ?>">
+                                <?php
+                                // Get image URL with proper fallback order
+                                $first_news_image_url = '';
+                                if (!empty($first_news['display_image'])) {
+                                    $first_news_image_url = asset_path($first_news['display_image']);
+                                } elseif (!empty($first_news['featured_image'])) {
+                                    $first_news_image_url = asset_path($first_news['featured_image']);
+                                } elseif (!empty($first_news['image'])) {
+                                    $first_news_image_url = asset_path($first_news['image']);
+                                }
+                                ?>
+                                <?php if (!empty($first_news_image_url)): ?>
+                                <img src="<?php echo htmlspecialchars($first_news_image_url); ?>" 
+                                     alt="<?php echo htmlspecialchars($first_news['title']); ?>"
+                                     onerror="this.onerror=null; this.style.display='none'; this.parentElement.innerHTML='<div style=\'width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #eee; color: #999;\'><i class=\'fas fa-newspaper\' style=\'font-size: 50px;\'></i></div>';">
                                 <?php else: ?>
                                 <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #eee; color: #999;">
                                     <i class="fas fa-newspaper" style="font-size: 50px;"></i>
@@ -2212,11 +2355,23 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     <ul class="widget-post-list">
                         <?php foreach (array_slice($latest_news, 1, 5) as $latest): ?>
                         <li class="widget-post-item">
-                            <?php if (!empty($latest['featured_image']) || !empty($latest['image'])): ?>
+                            <?php
+                            // Get image URL with proper fallback order
+                            $latest_image_url = '';
+                            if (!empty($latest['display_image'])) {
+                                $latest_image_url = asset_path($latest['display_image']);
+                            } elseif (!empty($latest['featured_image'])) {
+                                $latest_image_url = asset_path($latest['featured_image']);
+                            } elseif (!empty($latest['image'])) {
+                                $latest_image_url = asset_path($latest['image']);
+                            }
+                            ?>
+                            <?php if (!empty($latest_image_url)): ?>
                             <div class="widget-post-thumb">
                                 <a href="<?php echo !empty($latest['slug']) ? 'news-details.php?slug=' . urlencode($latest['slug']) : 'news-details.php?id=' . $latest['id']; ?>">
-                                    <img src="<?php echo htmlspecialchars(asset_path($latest['featured_image'] ?? $latest['image'])); ?>" 
-                                         alt="<?php echo htmlspecialchars($latest['title']); ?>">
+                                    <img src="<?php echo htmlspecialchars($latest_image_url); ?>" 
+                                         alt="<?php echo htmlspecialchars($latest['title']); ?>"
+                                         onerror="this.onerror=null; this.style.display='none'; this.parentElement.parentElement.innerHTML='<div style=\'display: flex; align-items: center; justify-content: center; color: #ccc;\'><i class=\'fas fa-newspaper\'></i></div>';">
                                 </a>
                             </div>
                             <?php else: ?>
