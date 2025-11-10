@@ -196,7 +196,49 @@ function getHeaderSetting($key, $default = '') {
 
 $site_name = getHeaderSetting('site_name', defined('SITE_NAME') ? SITE_NAME : '');
 $show_site_name = getHeaderSetting('show_site_name', '1');
-$site_logo = getHeaderSetting('site_logo', '');
+
+// Check if logo was preloaded (from news-details.php or other pages)
+if (!empty($GLOBALS['site_logo_preloaded'])) {
+    $site_logo = $GLOBALS['site_logo_preloaded'];
+} else {
+    // Get logo from database (same as artist-profile-mobile.php)
+    $site_logo = '';
+    try {
+        global $conn;
+        if (!$conn) {
+            require_once __DIR__ . '/../config/database.php';
+            $db = new Database();
+            $conn = $db->getConnection();
+        }
+        if ($conn) {
+            $logoStmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'site_logo'");
+            $logoStmt->execute();
+            $logo_result = $logoStmt->fetch(PDO::FETCH_ASSOC);
+            if ($logo_result && !empty($logo_result['setting_value'])) {
+                $site_logo = $logo_result['setting_value'];
+                // Normalize logo path (same as artist-profile-mobile.php)
+                $normalizedLogo = str_replace('\\', '/', $site_logo);
+                $normalizedLogo = preg_replace('#^\.\./#', '', $normalizedLogo);
+                $normalizedLogo = str_replace('../', '', $normalizedLogo);
+                
+                // Build full URL if needed (same as artist-profile-mobile.php)
+                if (!empty($normalizedLogo) && strpos($normalizedLogo, 'http') !== 0) {
+                    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+                    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                    $base_path = defined('BASE_PATH') ? BASE_PATH : '/';
+                    $baseUrl = $protocol . $host . $base_path;
+                    $site_logo = $baseUrl . ltrim($normalizedLogo, '/');
+                } else {
+                    $site_logo = $normalizedLogo;
+                }
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Error getting logo in header.php: " . $e->getMessage());
+        $site_logo = '';
+    }
+}
+
 $site_favicon = getHeaderSetting('site_favicon', '');
 
 // Debug: Log logo value for troubleshooting
@@ -791,48 +833,18 @@ if (function_exists('renderThemeStyles')) {
         
         <a href="index.php" class="logo">
             <?php 
-            // Always try to show logo if available
+            // Always try to show logo if available (same logic as artist-profile-mobile.php)
             $logoDisplayed = false;
             
-            // Debug log
-            error_log("Header Logo Debug - site_logo from DB: " . ($site_logo ?? 'empty'));
-            
-            if (!empty($site_logo) && trim($site_logo) !== ''): 
-                // Convert Windows backslashes to forward slashes first
-                $normalizedLogo = str_replace('\\', '/', $site_logo);
-                
-                // Remove '../' if present (from admin directory paths like '../uploads/branding/logo.jpg')
-                $normalizedLogo = preg_replace('#^\.\./#', '', $normalizedLogo);
-                $normalizedLogo = str_replace('../', '', $normalizedLogo);
-                
-                // Try asset_path first
-                $logoPath = asset_path($normalizedLogo);
-                
-                // If asset_path returns empty or same as input, try manual construction
-                if (empty($logoPath) || $logoPath === $normalizedLogo || $logoPath === '/' || $logoPath === $currentBaseUrl) {
-                    // Build path manually
-                    $baseWithoutSlash = rtrim($currentBaseUrl, '/');
-                    if (strpos($normalizedLogo, 'http://') === 0 || strpos($normalizedLogo, 'https://') === 0) {
-                        $logoPath = $normalizedLogo;
-                    } elseif (strpos($normalizedLogo, '/') === 0) {
-                        $logoPath = $baseWithoutSlash . $normalizedLogo;
-                    } else {
-                        $logoPath = $baseWithoutSlash . '/' . ltrim($normalizedLogo, '/');
-                    }
-                }
-                
-                error_log("Header Logo Debug - normalized: " . $normalizedLogo . ", final path: " . $logoPath);
-                
-                // Always show logo image if we have a valid path - let browser handle loading errors
-                // Show logo if path is not empty and not just a slash
-                if (!empty($logoPath) && $logoPath !== '/' && strlen($logoPath) > 1):
-                    $logoDisplayed = true;
+            // $site_logo is already normalized and has full URL from getHeaderSetting or preloaded
+            if (!empty($site_logo) && trim($site_logo) !== '' && strpos($site_logo, 'http') !== false):
+                $logoDisplayed = true;
             ?>
-                <img src="<?php echo htmlspecialchars($logoPath); ?>" 
+                <img src="<?php echo htmlspecialchars($site_logo); ?>" 
                      alt="<?php echo htmlspecialchars($site_name ?: (defined('SITE_NAME') ? SITE_NAME : '')); ?>" 
                      style="width: 32px; height: 32px; object-fit: contain; display: block;"
                      onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='block';">
-            <?php endif; endif; ?>
+            <?php endif; ?>
             <?php if (!$logoDisplayed): ?>
                 <i class="fas fa-music"></i>
             <?php else: ?>

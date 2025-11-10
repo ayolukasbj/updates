@@ -1927,8 +1927,42 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
 </head>
 <body>
     <?php
+    // Get logo from settings BEFORE including header (same as artist-profile-mobile.php)
+    // This ensures logo is available when header.php loads
+    $site_logo_for_header = '';
+    try {
+        if ($conn) {
+            $logoStmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'site_logo'");
+            $logoStmt->execute();
+            $logo_result = $logoStmt->fetch(PDO::FETCH_ASSOC);
+            if ($logo_result && !empty($logo_result['setting_value'])) {
+                $site_logo_for_header = $logo_result['setting_value'];
+                // Normalize logo path (same as artist-profile-mobile.php)
+                $normalizedLogo = str_replace('\\', '/', $site_logo_for_header);
+                $normalizedLogo = preg_replace('#^\.\./#', '', $normalizedLogo);
+                $normalizedLogo = str_replace('../', '', $normalizedLogo);
+                
+                // Build full URL if needed (same as artist-profile-mobile.php)
+                if (!empty($normalizedLogo) && strpos($normalizedLogo, 'http') !== 0) {
+                    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+                    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                    $base_path = defined('BASE_PATH') ? BASE_PATH : '/';
+                    $baseUrl = $protocol . $host . $base_path;
+                    $site_logo_for_header = $baseUrl . ltrim($normalizedLogo, '/');
+                } else {
+                    $site_logo_for_header = $normalizedLogo;
+                }
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Error getting logo in news-details.php: " . $e->getMessage());
+        $site_logo_for_header = '';
+    }
+    
+    // Make logo available to header.php via global variable
+    $GLOBALS['site_logo_preloaded'] = $site_logo_for_header;
+    
     // Ensure asset_path function is available before header is included
-    // This is needed because header.php uses asset_path for logo
     if (!function_exists('asset_path')) {
         function asset_path($path) {
             if (empty($path)) return '';
@@ -2074,30 +2108,34 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
 
                 <!-- Featured Image -->
                 <?php 
-                // Get featured image - try all possible sources
-                $featured_image_url = '';
-                $raw_image_path = '';
+                // Get featured image - use same logic as homepage slider (direct image field)
+                // Homepage slider uses: $carousel_news['image'] directly
+                $featured_image = '';
                 
-                // First, get the raw image path from any available field
+                // Use image field directly (same as homepage slider)
                 if (!empty($news_item['image']) && trim($news_item['image']) !== '') {
-                    $raw_image_path = trim($news_item['image']);
-                } elseif (!empty($news_item['featured_image']) && trim($news_item['featured_image']) !== '') {
-                    $raw_image_path = trim($news_item['featured_image']);
-                } elseif (!empty($news_item['display_image']) && trim($news_item['display_image']) !== '') {
-                    $raw_image_path = trim($news_item['display_image']);
+                    $featured_image = trim($news_item['image']);
+                } 
+                // Fallback to featured_image if image is empty
+                elseif (!empty($news_item['featured_image']) && trim($news_item['featured_image']) !== '') {
+                    $featured_image = trim($news_item['featured_image']);
+                } 
+                // Fallback to display_image
+                elseif (!empty($news_item['display_image']) && trim($news_item['display_image']) !== '') {
+                    $featured_image = trim($news_item['display_image']);
                 }
                 
-                // If still empty, query database directly
-                if (empty($raw_image_path)) {
+                // If still empty, query database directly (same as homepage does)
+                if (empty($featured_image)) {
                     try {
                         $imgStmt = $conn->prepare("SELECT image, featured_image FROM news WHERE id = ?");
                         $imgStmt->execute([$news_item['id']]);
                         $imgData = $imgStmt->fetch(PDO::FETCH_ASSOC);
                         if ($imgData) {
                             if (!empty($imgData['image']) && trim($imgData['image']) !== '') {
-                                $raw_image_path = trim($imgData['image']);
+                                $featured_image = trim($imgData['image']);
                             } elseif (!empty($imgData['featured_image']) && trim($imgData['featured_image']) !== '') {
-                                $raw_image_path = trim($imgData['featured_image']);
+                                $featured_image = trim($imgData['featured_image']);
                             }
                         }
                     } catch (Exception $e) {
@@ -2105,19 +2143,14 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     }
                 }
                 
-                // Convert raw path to full URL using asset_path
-                if (!empty($raw_image_path)) {
-                    $featured_image_url = asset_path($raw_image_path);
-                    error_log("News Featured Image - Raw path: " . $raw_image_path . ", Full URL: " . $featured_image_url);
-                }
-                
-                if (!empty($featured_image_url)): 
+                // Display image directly (same as homepage slider - no asset_path needed)
+                if (!empty($featured_image)): 
                 ?>
                 <div class="article-featured-image" style="margin: 20px 0; width: 100%;">
-                    <img src="<?php echo htmlspecialchars($featured_image_url); ?>" 
+                    <img src="<?php echo htmlspecialchars($featured_image); ?>" 
                          alt="<?php echo htmlspecialchars($news_item['title']); ?>"
                          style="max-width: 100%; height: auto; display: block; width: 100%; border-radius: 8px;"
-                         onerror="console.error('Featured image failed to load: <?php echo htmlspecialchars($featured_image_url); ?>'); this.style.display='none'; this.parentElement.innerHTML='<div style=\'padding: 40px; text-align: center; background: #f5f5f5; border-radius: 8px; color: #999;\'><i class=\'fas fa-image\' style=\'font-size: 48px; margin-bottom: 10px; display: block;\'></i><p>Image not available</p></div>';">
+                         onerror="console.error('Featured image failed to load: <?php echo htmlspecialchars($featured_image); ?>'); this.style.display='none'; this.parentElement.innerHTML='<div style=\'padding: 40px; text-align: center; background: #f5f5f5; border-radius: 8px; color: #999;\'><i class=\'fas fa-image\' style=\'font-size: 48px; margin-bottom: 10px; display: block;\'></i><p>Image not available</p></div>';">
                 </div>
                 <?php else: ?>
                 <!-- No featured image available for this news article -->
