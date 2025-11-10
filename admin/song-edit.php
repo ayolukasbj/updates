@@ -68,6 +68,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (empty($title)) {
             $error = 'Song title is required';
         } else {
+            // Validate artist_id - check if it exists
+            if (!empty($artist_id)) {
+                $checkArtist = $conn->prepare("SELECT id FROM artists WHERE id = ?");
+                $checkArtist->execute([$artist_id]);
+                if ($checkArtist->rowCount() == 0) {
+                    $artist_id = null; // Invalid artist, set to null
+                    error_log("Invalid artist_id provided, setting to NULL");
+                }
+            } else {
+                $artist_id = null;
+            }
+            
+            // Validate album_id - check if it exists (foreign key constraint)
+            if (!empty($album_id)) {
+                $checkAlbum = $conn->prepare("SELECT id FROM albums WHERE id = ?");
+                $checkAlbum->execute([$album_id]);
+                if ($checkAlbum->rowCount() == 0) {
+                    $album_id = null; // Invalid album, set to null to avoid foreign key constraint violation
+                    error_log("Invalid album_id provided, setting to NULL to avoid foreign key constraint");
+                }
+            } else {
+                $album_id = null;
+            }
+            
             // Check if share_excerpt column exists, if not add it
             try {
                 $checkCol = $conn->query("SHOW COLUMNS FROM songs LIKE 'share_excerpt'");
