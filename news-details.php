@@ -541,20 +541,35 @@ if (!function_exists('displayAd')) {
     }
 }
 
-// Extract AdSense head script if present in ad code
-$adsense_head_script = '';
+// Extract AdSense head scripts from ALL ad positions that might contain AdSense
+$adsense_head_scripts = [];
+$ad_positions_to_check = [
+    'news_header', 'news_after_header', 'news_before_content', 'news_in_article',
+    'news_after_content', 'news_after_tags', 'news_after_author', 'news_after_related',
+    'news_after_comments', 'news_sidebar_top', 'news_sidebar', 'news_sidebar_bottom'
+];
+
 if (function_exists('getAdsByPosition')) {
-    $ad = getAdsByPosition('news_in_article');
-    if ($ad && $ad['type'] === 'code' && !empty($ad['content'])) {
-        // Check if ad content contains AdSense script tag
-        if (preg_match('/<script[^>]*src=["\']([^"\']*pagead2\.googlesyndication\.com[^"\']*)["\'][^>]*><\/script>/i', $ad['content'], $matches)) {
-            // Extract the script tag for head
-            if (preg_match('/<script[^>]*src=["\'][^"\']*pagead2\.googlesyndication\.com[^"\']*["\'][^>]*><\/script>/i', $ad['content'], $script_matches)) {
-                $adsense_head_script = $script_matches[0];
+    foreach ($ad_positions_to_check as $position) {
+        try {
+            $ad = getAdsByPosition($position);
+            if ($ad && $ad['type'] === 'code' && !empty($ad['content'])) {
+                // Check if ad content contains AdSense script tag
+                if (preg_match('/<script[^>]*src=["\'][^"\']*pagead2\.googlesyndication\.com[^"\']*["\'][^>]*><\/script>/i', $ad['content'], $script_matches)) {
+                    // Extract the script tag for head (avoid duplicates)
+                    $script_tag = $script_matches[0];
+                    if (!in_array($script_tag, $adsense_head_scripts)) {
+                        $adsense_head_scripts[] = $script_tag;
+                    }
+                }
             }
+        } catch (Exception $e) {
+            // Continue checking other positions
+            error_log("Error checking ad position $position: " . $e->getMessage());
         }
     }
 }
+$adsense_head_script = !empty($adsense_head_scripts) ? implode("\n    ", $adsense_head_scripts) : '';
 
 // Check if user is logged in
 $is_logged_in = false;
@@ -1792,6 +1807,18 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     </div>
                 </div>
 
+                <?php
+                // Display header ad (before article)
+                if (function_exists('displayAd')) {
+                    $header_ad = displayAd('news_header');
+                    if (!empty($header_ad)): ?>
+                        <div class="ad-container" style="margin: 20px 0; text-align: center; width: 100%; max-width: 100%;">
+                            <?php echo $header_ad; ?>
+                        </div>
+                    <?php endif;
+                }
+                ?>
+
                 <!-- Article Header -->
                 <div class="article-header">
                     <?php if (!empty($news_item['category'])): ?>
@@ -1822,6 +1849,18 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     </div>
                 </div>
 
+                <?php
+                // Display ad after header (before featured image)
+                if (function_exists('displayAd')) {
+                    $after_header_ad = displayAd('news_after_header');
+                    if (!empty($after_header_ad)): ?>
+                        <div class="ad-container" style="margin: 20px 0; text-align: center; width: 100%; max-width: 100%;">
+                            <?php echo $after_header_ad; ?>
+                        </div>
+                    <?php endif;
+                }
+                ?>
+
                 <!-- Featured Image -->
                 <?php 
                 // Get featured image - match homepage logic exactly
@@ -1845,6 +1884,18 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 </div>
                 <?php endif; ?>
 
+                <?php
+                // Display ad before content (before article body)
+                if (function_exists('displayAd')) {
+                    $before_content_ad = displayAd('news_before_content');
+                    if (!empty($before_content_ad)): ?>
+                        <div class="ad-container" style="margin: 20px 0; text-align: center; width: 100%; max-width: 100%;">
+                            <?php echo $before_content_ad; ?>
+                        </div>
+                    <?php endif;
+                }
+                ?>
+
                 <!-- Article Body -->
                 <div class="article-body" style="width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; padding: 0 !important; margin-left: 0 !important; margin-right: 0 !important;">
                     <?php 
@@ -1861,6 +1912,18 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     ?>
                 </div>
 
+                <?php
+                // Display ad after content (after article body)
+                if (function_exists('displayAd')) {
+                    $after_content_ad = displayAd('news_after_content');
+                    if (!empty($after_content_ad)): ?>
+                        <div class="ad-container" style="margin: 30px 0; text-align: center; width: 100%; max-width: 100%;">
+                            <?php echo $after_content_ad; ?>
+                        </div>
+                    <?php endif;
+                }
+                ?>
+
                 <!-- Tags -->
                 <?php if (!empty($news_item['category'])): ?>
                 <div class="article-tags">
@@ -1872,6 +1935,18 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     </div>
                 </div>
                 <?php endif; ?>
+
+                <?php
+                // Display ad after tags (before author box)
+                if (function_exists('displayAd')) {
+                    $after_tags_ad = displayAd('news_after_tags');
+                    if (!empty($after_tags_ad)): ?>
+                        <div class="ad-container" style="margin: 30px 0; text-align: center; width: 100%; max-width: 100%;">
+                            <?php echo $after_tags_ad; ?>
+                        </div>
+                    <?php endif;
+                }
+                ?>
 
                 <!-- Author Box -->
                 <div class="author-box">
@@ -1892,6 +1967,18 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                         </div>
                     </div>
                 </div>
+
+                <?php
+                // Display ad after author (before related posts)
+                if (function_exists('displayAd')) {
+                    $after_author_ad = displayAd('news_after_author');
+                    if (!empty($after_author_ad)): ?>
+                        <div class="ad-container" style="margin: 30px 0; text-align: center; width: 100%; max-width: 100%;">
+                            <?php echo $after_author_ad; ?>
+                        </div>
+                    <?php endif;
+                }
+                ?>
 
                 <!-- Similar News (Related Posts) -->
                 <?php if (!empty($related_news)): ?>
@@ -1931,6 +2018,18 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                     </div>
                 </div>
                 <?php endif; ?>
+
+                <?php
+                // Display ad after related posts (before navigation)
+                if (function_exists('displayAd')) {
+                    $after_related_ad = displayAd('news_after_related');
+                    if (!empty($after_related_ad)): ?>
+                        <div class="ad-container" style="margin: 30px 0; text-align: center; width: 100%; max-width: 100%;">
+                            <?php echo $after_related_ad; ?>
+                        </div>
+                    <?php endif;
+                }
+                ?>
 
                 <!-- Previous/Next Navigation -->
                 <div class="post-navigation">
@@ -1987,10 +2086,34 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                         <div style="text-align: center; color: #999; padding: 20px;">Loading comments...</div>
                     </div>
                 </div>
+
+                <?php
+                // Display ad after comments
+                if (function_exists('displayAd')) {
+                    $after_comments_ad = displayAd('news_after_comments');
+                    if (!empty($after_comments_ad)): ?>
+                        <div class="ad-container" style="margin: 40px 0; text-align: center; width: 100%; max-width: 100%;">
+                            <?php echo $after_comments_ad; ?>
+                        </div>
+                    <?php endif;
+                }
+                ?>
             </article>
 
             <!-- Sidebar -->
             <aside class="sidebar">
+                <?php
+                // Display sidebar top ad
+                if (function_exists('displayAd')) {
+                    $sidebar_top_ad = displayAd('news_sidebar_top');
+                    if (!empty($sidebar_top_ad)): ?>
+                        <div class="sidebar-widget">
+                            <?php echo $sidebar_top_ad; ?>
+                        </div>
+                    <?php endif;
+                }
+                ?>
+
                 <!-- Email Subscription -->
                 <div class="sidebar-widget">
                     <h3>Newsletter</h3>
@@ -2147,18 +2270,30 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 <?php endif; ?>
 
                 <?php
-                // Display sidebar ad if exists
+                // Display sidebar ad (middle of sidebar)
                 try {
                     if (function_exists('displayAd')) {
                         $sidebar_ad = displayAd('news_sidebar');
-                        if ($sidebar_ad): ?>
+                        if (!empty($sidebar_ad)): ?>
                             <div class="sidebar-widget">
                                 <?php echo $sidebar_ad; ?>
                             </div>
                         <?php endif;
                     }
                 } catch (Exception $e) {
-                    // Ignore ad errors
+                    error_log('Sidebar ad error: ' . $e->getMessage());
+                }
+                ?>
+
+                <?php
+                // Display sidebar bottom ad (after all widgets)
+                if (function_exists('displayAd')) {
+                    $sidebar_bottom_ad = displayAd('news_sidebar_bottom');
+                    if (!empty($sidebar_bottom_ad)): ?>
+                        <div class="sidebar-widget">
+                            <?php echo $sidebar_bottom_ad; ?>
+                        </div>
+                    <?php endif;
                 }
                 ?>
             </aside>
