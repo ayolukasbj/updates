@@ -580,6 +580,11 @@ if (function_exists('renderThemeStyles')) {
         background: #2c3e50;
         padding: 12px 15px;
         margin-top: 0;
+        display: block !important;
+        visibility: visible !important;
+        position: relative;
+        z-index: 998;
+        width: 100%;
     }
 
     .secondary-nav-container {
@@ -589,7 +594,7 @@ if (function_exists('renderThemeStyles')) {
     }
 
     .secondary-nav-menu {
-        display: flex;
+        display: flex !important;
         align-items: center;
         justify-content: center;
         gap: 40px;
@@ -597,6 +602,8 @@ if (function_exists('renderThemeStyles')) {
         margin: 0;
         padding: 0;
         position: relative;
+        visibility: visible !important;
+        opacity: 1 !important;
     }
 
     .secondary-nav-menu li {
@@ -604,7 +611,7 @@ if (function_exists('renderThemeStyles')) {
     }
 
     .secondary-nav-menu a {
-        color: #fff;
+        color: #fff !important;
         text-decoration: none;
         font-size: 14px;
         font-weight: 600;
@@ -612,10 +619,12 @@ if (function_exists('renderThemeStyles')) {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
         letter-spacing: 0.5px;
         padding: 8px 16px;
-        display: block;
+        display: block !important;
         transition: color 0.3s;
         position: relative;
         z-index: 2;
+        visibility: visible !important;
+        opacity: 1 !important;
     }
 
     .secondary-nav-menu a:hover,
@@ -638,17 +647,23 @@ if (function_exists('renderThemeStyles')) {
     @media (max-width: 768px) {
         .secondary-nav {
             padding: 10px 15px;
+            display: block !important;
+            visibility: visible !important;
         }
 
         .secondary-nav-menu {
             gap: 20px;
             flex-wrap: wrap;
             justify-content: center;
+            display: flex !important;
+            visibility: visible !important;
         }
 
         .secondary-nav-menu a {
             font-size: 12px;
             padding: 6px 12px;
+            display: block !important;
+            visibility: visible !important;
         }
     }
 
@@ -929,6 +944,25 @@ if (function_exists('renderThemeStyles')) {
 </nav>
 
 <script>
+// Ensure secondary navigation menu is always visible
+(function() {
+    // Force menu visibility on page load
+    const secondaryNav = document.querySelector('.secondary-nav');
+    const secondaryNavMenu = document.querySelector('.secondary-nav-menu');
+    
+    if (secondaryNav) {
+        secondaryNav.style.display = 'block';
+        secondaryNav.style.visibility = 'visible';
+        secondaryNav.style.opacity = '1';
+    }
+    
+    if (secondaryNavMenu) {
+        secondaryNavMenu.style.display = 'flex';
+        secondaryNavMenu.style.visibility = 'visible';
+        secondaryNavMenu.style.opacity = '1';
+    }
+})();
+
 // Update active state for secondary nav
 (function() {
     const currentPage = window.location.pathname.split('/').pop() || 'index.php';
