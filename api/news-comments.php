@@ -91,15 +91,56 @@ try {
             }
         }
         
+        // Add is_approved column if it doesn't exist
+        if (!in_array('is_approved', $columns)) {
+            try {
+                $conn->exec("ALTER TABLE news_comments ADD COLUMN is_approved BOOLEAN DEFAULT TRUE AFTER comment");
+                // Update existing rows to be approved
+                $conn->exec("UPDATE news_comments SET is_approved = TRUE WHERE is_approved IS NULL");
+            } catch (Exception $e) {
+                error_log("Error adding is_approved column: " . $e->getMessage());
+            }
+        }
+        
         // Change user_id to allow NULL if it's currently NOT NULL
         try {
             $conn->exec("ALTER TABLE news_comments MODIFY COLUMN user_id INT NULL");
         } catch (Exception $e) {
-            // Column might already allow NULL or have constraints
+            // Column might already allow NULL or have constraints - ignore
         }
     }
 } catch (Exception $e) {
     error_log("News comments table setup error: " . $e->getMessage());
+}
+
+// Force ensure is_approved column exists - run this BEFORE any queries
+try {
+    // First check if table exists
+    $table_check = $conn->query("SHOW TABLES LIKE 'news_comments'");
+    if ($table_check->rowCount() > 0) {
+        // Table exists, check for is_approved column
+        $col_check = $conn->query("SHOW COLUMNS FROM news_comments LIKE 'is_approved'");
+        if ($col_check->rowCount() == 0) {
+            // Column doesn't exist, add it
+            try {
+                $conn->exec("ALTER TABLE news_comments ADD COLUMN is_approved BOOLEAN DEFAULT TRUE");
+                // Set all existing comments as approved
+                $conn->exec("UPDATE news_comments SET is_approved = TRUE");
+                error_log("Added is_approved column to news_comments table");
+            } catch (Exception $e) {
+                error_log("Failed to add is_approved column: " . $e->getMessage());
+                // Try alternative syntax
+                try {
+                    $conn->exec("ALTER TABLE news_comments ADD COLUMN is_approved TINYINT(1) DEFAULT 1");
+                    $conn->exec("UPDATE news_comments SET is_approved = 1");
+                } catch (Exception $e2) {
+                    error_log("Failed to add is_approved with alternative syntax: " . $e2->getMessage());
+                }
+            }
+        }
+    }
+} catch (Exception $e) {
+    error_log("Error ensuring is_approved column exists: " . $e->getMessage());
 }
 
 $action = $_GET['action'] ?? $_POST['action'] ?? 'list';
@@ -114,15 +155,26 @@ try {
                 exit;
             }
             
-            // Check if name column exists
+            // Check if columns exist
             $has_name_column = false;
+            $has_is_approved = false;
             try {
-                $col_check = $conn->query("SHOW COLUMNS FROM news_comments LIKE 'name'");
-                $has_name_column = $col_check->rowCount() > 0;
+                $col_check = $conn->query("SHOW COLUMNS FROM news_comments");
+                $all_columns = $col_check->fetchAll(PDO::FETCH_COLUMN);
+                $has_name_column = in_array('name', $all_columns);
+                $has_is_approved = in_array('is_approved', $all_columns);
             } catch (Exception $e) {
                 $has_name_column = false;
+                $has_is_approved = false;
             }
             
+            // Build WHERE clause based on available columns
+            $where_clause = "nc.news_id = ?";
+            if ($has_is_approved) {
+                $where_clause .= " AND nc.is_approved = 1";
+            }
+            
+            // Build SELECT based on available columns
             if ($has_name_column) {
                 $stmt = $conn->prepare("
                     SELECT nc.*, 
@@ -130,7 +182,7 @@ try {
                            COALESCE(u.avatar, '') as avatar
                     FROM news_comments nc
                     LEFT JOIN users u ON nc.user_id = u.id
-                    WHERE nc.news_id = ? AND nc.is_approved = 1
+                    WHERE $where_clause
                     ORDER BY nc.created_at DESC
                 ");
             } else {
@@ -141,16 +193,38 @@ try {
                            COALESCE(u.avatar, '') as avatar
                     FROM news_comments nc
                     LEFT JOIN users u ON nc.user_id = u.id
-                    WHERE nc.news_id = ? AND nc.is_approved = 1
+                    WHERE $where_clause
                     ORDER BY nc.created_at DESC
                 ");
             }
-            $stmt->execute([$news_id]);
-            $comments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            try {
+                $stmt->execute([$news_id]);
+                $comments = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (PDOException $e) {
+                // If query fails due to missing column, try simpler query
+                error_log("Comments query error: " . $e->getMessage());
+                try {
+                    // Fallback: query without is_approved
+                    $fallback_stmt = $conn->prepare("
+                        SELECT nc.*, 
+                               COALESCE(u.username, 'Anonymous') as display_name,
+                               COALESCE(u.avatar, '') as avatar
+                        FROM news_comments nc
+                        LEFT JOIN users u ON nc.user_id = u.id
+                        WHERE nc.news_id = ?
+                        ORDER BY nc.created_at DESC
+                    ");
+                    $fallback_stmt->execute([$news_id]);
+                    $comments = $fallback_stmt->fetchAll(PDO::FETCH_ASSOC);
+                } catch (Exception $e2) {
+                    error_log("Fallback query also failed: " . $e2->getMessage());
+                    $comments = [];
+                }
+            }
             
             echo json_encode([
                 'success' => true,
-                'comments' => $comments,
+                'comments' => array_values($comments),
                 'count' => count($comments)
             ]);
             break;
@@ -220,12 +294,48 @@ try {
                 exit;
             }
             
+            // Check which columns exist before inserting
+            $col_check = $conn->query("SHOW COLUMNS FROM news_comments");
+            $all_columns = $col_check->fetchAll(PDO::FETCH_COLUMN);
+            $has_name = in_array('name', $all_columns);
+            $has_email = in_array('email', $all_columns);
+            $has_website = in_array('website', $all_columns);
+            $has_is_approved = in_array('is_approved', $all_columns);
+            
+            // Build insert query based on available columns
+            $insert_fields = ['news_id', 'comment'];
+            $insert_values = [$news_id, $comment];
+            
+            if ($has_name) {
+                $insert_fields[] = 'name';
+                $insert_values[] = $name;
+            }
+            if ($has_email) {
+                $insert_fields[] = 'email';
+                $insert_values[] = $email;
+            }
+            if ($has_website && !empty($website)) {
+                $insert_fields[] = 'website';
+                $insert_values[] = $website;
+            }
+            if ($user_id) {
+                $insert_fields[] = 'user_id';
+                $insert_values[] = $user_id;
+            }
+            if ($has_is_approved) {
+                $insert_fields[] = 'is_approved';
+                $insert_values[] = 1;
+            }
+            
+            $fields_str = implode(', ', $insert_fields);
+            $placeholders = implode(', ', array_fill(0, count($insert_values), '?'));
+            
             try {
                 $stmt = $conn->prepare("
-                    INSERT INTO news_comments (news_id, user_id, name, email, website, comment, is_approved)
-                    VALUES (?, ?, ?, ?, ?, ?, 1)
+                    INSERT INTO news_comments ($fields_str)
+                    VALUES ($placeholders)
                 ");
-                $stmt->execute([$news_id, $user_id, $name, $email, $website, $comment]);
+                $stmt->execute($insert_values);
                 
                 echo json_encode([
                     'success' => true,

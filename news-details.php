@@ -401,8 +401,17 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="mobile-web-app-capable" content="yes">
     <title><?php echo $share_title; ?> - <?php echo defined('SITE_NAME') ? SITE_NAME : 'News'; ?></title>
+    <style>
+        /* Prevent horizontal scroll on all devices */
+        html, body {
+            overflow-x: hidden !important;
+            width: 100% !important;
+            max-width: 100% !important;
+        }
+    </style>
     
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="article">
@@ -1295,6 +1304,93 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 flex-wrap: wrap;
             }
         }
+        
+        /* Critical mobile fixes to prevent overflow */
+        @media (max-width: 768px) {
+            body, html {
+                width: 100% !important;
+                max-width: 100% !important;
+                overflow-x: hidden !important;
+                position: relative;
+            }
+            .main-content,
+            .article-container,
+            .article-main,
+            .article-body,
+            .article-header,
+            .comment-form,
+            .sidebar,
+            .sidebar-widget,
+            .article-body > *,
+            .article-body p,
+            .article-body div,
+            .article-body span,
+            .article-body h1,
+            .article-body h2,
+            .article-body h3,
+            .article-body h4,
+            .article-body h5,
+            .article-body h6,
+            .article-body blockquote,
+            .article-body ul,
+            .article-body ol,
+            .article-body li,
+            .article-body a,
+            .article-body img,
+            .article-body table,
+            .article-body td,
+            .article-body th {
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
+                word-wrap: break-word !important;
+                overflow-wrap: break-word !important;
+                word-break: break-word !important;
+            }
+            .article-body img {
+                height: auto !important;
+            }
+            table {
+                width: 100% !important;
+                display: block !important;
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
+            }
+            pre, code {
+                word-wrap: break-word !important;
+                white-space: pre-wrap !important;
+                max-width: 100% !important;
+                overflow-x: auto !important;
+            }
+            /* Force break long URLs and words */
+            a {
+                word-break: break-all !important;
+                overflow-wrap: break-word !important;
+            }
+        }
+        
+        /* Ensure no element can cause horizontal scroll */
+        @media (max-width: 480px) {
+            .main-content {
+                padding: 10px;
+            }
+            .article-main {
+                padding: 10px;
+            }
+            .article-body {
+                padding: 0;
+            }
+            .article-body p,
+            .article-body h2,
+            .article-body h3,
+            .article-body blockquote,
+            .article-body ul,
+            .article-body ol {
+                max-width: 100%;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1322,9 +1418,9 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
     }
     ?>
     
-    <div class="main-content">
-        <div class="article-container">
-            <article class="article-main">
+    <div class="main-content" style="width: 100% !important; max-width: 100% !important; overflow-x: hidden !important; box-sizing: border-box !important;">
+        <div class="article-container" style="width: 100% !important; max-width: 100% !important; box-sizing: border-box !important;">
+            <article class="article-main" style="width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; overflow-x: hidden !important;">
                 <!-- Share Stats Bar at Top -->
                 <div class="share-stats-bar">
                     <div class="share-stats">
@@ -1407,8 +1503,10 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                 <?php endif; ?>
 
                 <!-- Article Body -->
-                <div class="article-body">
-                    <?php echo $news_item['content']; ?>
+                <div class="article-body" style="width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; word-wrap: break-word !important; overflow-wrap: break-word !important; word-break: break-word !important;">
+                    <div style="width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; word-wrap: break-word !important; overflow-wrap: break-word !important; word-break: break-word !important;">
+                        <?php echo $news_item['content']; ?>
+                    </div>
                 </div>
 
                 <!-- Tags -->
