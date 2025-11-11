@@ -243,54 +243,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
             throw new Exception('Invalid plugin slug format. Plugin slug must contain only letters, numbers, hyphens, and underscores.');
         }
         
-        // Verify plugin exists on license server before attempting download
-        error_log("Plugin installation: Verifying plugin exists on license server...");
-        $verify_url = rtrim($license_server_url, '/') . '/api/plugin-store.php?action=info&plugin_slug=' . urlencode($plugin_slug);
-        if (!empty($license_key)) {
-            $verify_url .= '&license_key=' . urlencode($license_key);
+        // Verify plugin exists on license server - first check available plugins list
+        $plugin_found_in_list = false;
+        $actual_plugin_slug = $plugin_slug;
+        
+        foreach ($available_plugins as $available_plugin) {
+            $available_slug = $available_plugin['plugin_slug'] ?? '';
+            // Check exact match or case-insensitive match
+            if (strtolower($available_slug) === strtolower($plugin_slug)) {
+                $plugin_found_in_list = true;
+                $actual_plugin_slug = $available_slug; // Use the exact slug from server
+                error_log("Plugin installation: Found plugin in available list - slug: {$actual_plugin_slug}");
+                break;
+            }
         }
         
-        $verify_response = false;
-        if (function_exists('curl_init')) {
-            $ch = curl_init($verify_url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-            $verify_response = curl_exec($ch);
-            $verify_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
+        // If not found in list, try the info API endpoint
+        if (!$plugin_found_in_list) {
+            error_log("Plugin installation: Plugin not in available list, checking info API...");
+            $verify_url = rtrim($license_server_url, '/') . '/api/plugin-store.php?action=info&plugin_slug=' . urlencode($plugin_slug);
+            if (!empty($license_key)) {
+                $verify_url .= '&license_key=' . urlencode($license_key);
+            }
             
-            if ($verify_http_code === 404) {
-                throw new Exception("Plugin '{$plugin_slug}' not found on license server. Please ensure the plugin has been uploaded to the license server at: {$license_server_url}");
-            } elseif ($verify_http_code !== 200) {
-                error_log("Plugin installation: Plugin verification returned HTTP {$verify_http_code}");
-                // Continue anyway, might still be able to download
+            $verify_response = false;
+            if (function_exists('curl_init')) {
+                $ch = curl_init($verify_url);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+                $verify_response = curl_exec($ch);
+                $verify_http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                
+                if ($verify_http_code === 404) {
+                    // List available plugin slugs for debugging
+                    $available_slugs = array_map(function($p) { return $p['plugin_slug'] ?? ''; }, $available_plugins);
+                    $available_slugs_str = implode(', ', array_filter($available_slugs));
+                    throw new Exception("Plugin '{$plugin_slug}' not found on license server. Available plugins: " . ($available_slugs_str ?: 'none') . ". Please ensure the plugin has been uploaded to the license server at: {$license_server_url}");
+                } elseif ($verify_http_code !== 200) {
+                    error_log("Plugin installation: Plugin verification returned HTTP {$verify_http_code}");
+                    // Continue anyway, might still be able to download
+                }
+            } else {
+                $context = stream_context_create([
+                    'http' => [
+                        'timeout' => 10,
+                        'follow_location' => true,
+                        'ignore_errors' => true
+                    ],
+                    'ssl' => [
+                        'verify_peer' => false,
+                        'verify_peer_name' => false
+                    ]
+                ]);
+                $verify_response = @file_get_contents($verify_url, false, $context);
             }
-        } else {
-            $context = stream_context_create([
-                'http' => [
-                    'timeout' => 10,
-                    'follow_location' => true,
-                    'ignore_errors' => true
-                ],
-                'ssl' => [
-                    'verify_peer' => false,
-                    'verify_peer_name' => false
-                ]
-            ]);
-            $verify_response = @file_get_contents($verify_url, false, $context);
+            
+            if ($verify_response) {
+                $verify_data = json_decode($verify_response, true);
+                if ($verify_data && isset($verify_data['success']) && $verify_data['success'] && isset($verify_data['plugin'])) {
+                    $plugin_found_in_list = true;
+                    $actual_plugin_slug = $verify_data['plugin']['plugin_slug'] ?? $plugin_slug;
+                    error_log("Plugin installation: Verified plugin exists via info API - slug: {$actual_plugin_slug}");
+                } elseif ($verify_data && isset($verify_data['error'])) {
+                    throw new Exception("License server error: " . $verify_data['error']);
+                }
+            }
         }
         
-        if ($verify_response) {
-            $verify_data = json_decode($verify_response, true);
-            if ($verify_data && isset($verify_data['success']) && $verify_data['success'] && isset($verify_data['plugin'])) {
-                error_log("Plugin installation: Verified plugin exists - " . ($verify_data['plugin']['plugin_name'] ?? $plugin_slug));
-            } elseif ($verify_data && isset($verify_data['error'])) {
-                throw new Exception("License server error: " . $verify_data['error']);
-            }
+        // Use the actual plugin slug from server (might be different case)
+        if ($actual_plugin_slug !== $plugin_slug) {
+            error_log("Plugin installation: Using server plugin slug: {$actual_plugin_slug} (requested: {$plugin_slug})");
+            $plugin_slug = $actual_plugin_slug;
         }
         
         // Download plugin from license server
