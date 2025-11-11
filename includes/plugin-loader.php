@@ -14,6 +14,7 @@ class PluginLoader {
     private static $instance = null;
     private static $plugins = [];
     private static $active_plugins = [];
+    private static $loaded_plugin_files = []; // Track which plugin files have been loaded
     private static $hooks = [
         'actions' => [],
         'filters' => []
@@ -248,6 +249,18 @@ class PluginLoader {
             return;
         }
         
+        // Normalize plugin file path for comparison
+        $plugin_file_normalized = realpath($plugin_file);
+        if (!$plugin_file_normalized) {
+            $plugin_file_normalized = $plugin_file;
+        }
+        
+        // Check if this plugin file has already been loaded
+        if (isset(self::$loaded_plugin_files[$plugin_file_normalized])) {
+            error_log("Plugin file already loaded, skipping: {$plugin_file}");
+            return;
+        }
+        
         // Skip loading if file is empty or too small
         if (filesize($plugin_file) < 10) {
             error_log("Skipping empty plugin file: {$plugin_file}");
@@ -271,8 +284,11 @@ class PluginLoader {
                 return false; // Let errors through
             });
             
-            // Use include instead of require_once to allow continuation on error
-            @include $plugin_file;
+            // Use include_once to prevent double-loading, but catch errors
+            @include_once $plugin_file;
+            
+            // Mark this plugin file as loaded
+            self::$loaded_plugin_files[$plugin_file_normalized] = true;
             
             // Restore error handler
             if ($old_error_handler !== null) {

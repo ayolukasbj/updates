@@ -15,6 +15,12 @@ if (!defined('ABSPATH') && !function_exists('add_action')) {
     exit;
 }
 
+// Prevent plugin from being loaded multiple times
+if (defined('MP3_TAGGER_PLUGIN_LOADED')) {
+    return;
+}
+define('MP3_TAGGER_PLUGIN_LOADED', true);
+
 // Load plugin API if not already loaded
 if (!function_exists('add_action')) {
     if (file_exists(__DIR__ . '/../../includes/plugin-api.php')) {
@@ -129,22 +135,28 @@ add_action('init', function() {
 /**
  * Settings page
  */
-function mp3_tagger_settings_page() {
-    require_once MP3_TAGGER_PLUGIN_DIR . 'admin/settings.php';
+if (!function_exists('mp3_tagger_settings_page')) {
+    function mp3_tagger_settings_page() {
+        require_once MP3_TAGGER_PLUGIN_DIR . 'admin/settings.php';
+    }
 }
 
 /**
  * Sync page
  */
-function mp3_tagger_sync_page() {
-    require_once MP3_TAGGER_PLUGIN_DIR . 'admin/sync.php';
+if (!function_exists('mp3_tagger_sync_page')) {
+    function mp3_tagger_sync_page() {
+        require_once MP3_TAGGER_PLUGIN_DIR . 'admin/sync.php';
+    }
 }
 
 /**
  * Edit page
  */
-function mp3_tagger_edit_page() {
-    require_once MP3_TAGGER_PLUGIN_DIR . 'admin/edit.php';
+if (!function_exists('mp3_tagger_edit_page')) {
+    function mp3_tagger_edit_page() {
+        require_once MP3_TAGGER_PLUGIN_DIR . 'admin/edit.php';
+    }
 }
 
 /**
