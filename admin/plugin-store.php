@@ -283,8 +283,42 @@ if (!empty($license_server_url)) {
 
 // Get installed plugins
 $installed_plugins = [];
+$installed_plugins_by_file = []; // Index by file path for better matching
 
 try {
+    // First, check database directly for installed plugins
+    $db = new Database();
+    $conn = $db->getConnection();
+    if ($conn) {
+        try {
+            $checkTable = $conn->query("SHOW TABLES LIKE 'plugins'");
+            if ($checkTable->rowCount() > 0) {
+                $stmt = $conn->query("SELECT plugin_file, status FROM plugins");
+                $db_plugins = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                foreach ($db_plugins as $db_plugin) {
+                    $plugin_file = $db_plugin['plugin_file'];
+                    $plugin_file_normalized = str_replace('\\', '/', $plugin_file);
+                    
+                    // Extract plugin slug from file path
+                    // Format: plugins/plugin-slug/plugin-slug.php or plugins/plugin-slug/plugin.php
+                    if (preg_match('/plugins\/([^\/]+)\//', $plugin_file_normalized, $matches)) {
+                        $plugin_slug = $matches[1];
+                        $installed_plugins_by_file[$plugin_file] = $plugin_slug;
+                        $installed_plugins_by_file[$plugin_file_normalized] = $plugin_slug;
+                        
+                        // Also try without plugins/ prefix
+                        $plugin_file_no_prefix = preg_replace('/^plugins\//', '', $plugin_file_normalized);
+                        $installed_plugins_by_file[$plugin_file_no_prefix] = $plugin_slug;
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Error reading plugins from database: " . $e->getMessage());
+        }
+    }
+    
+    // Then, get plugins from PluginLoader
     if (class_exists('PluginLoader')) {
         // Force re-initialize to ensure plugins are loaded (especially after installation)
         PluginLoader::init(true); // Force reload
@@ -297,12 +331,38 @@ try {
             $plugin_file = $plugin['file'] ?? '';
             $plugin_file_normalized = str_replace('\\', '/', $plugin_file);
             
+            // Check if this plugin is in database (by file path)
+            $is_in_db = false;
+            $db_status = 'inactive';
+            foreach ($installed_plugins_by_file as $db_file => $db_slug) {
+                if (strpos($plugin_file_normalized, $db_file) !== false || 
+                    strpos($db_file, $plugin_file_normalized) !== false ||
+                    basename(dirname($plugin_file_normalized)) === basename(dirname($db_file))) {
+                    $is_in_db = true;
+                    // Get status from database
+                    try {
+                        $statusStmt = $conn->prepare("SELECT status FROM plugins WHERE plugin_file = ? OR plugin_file LIKE ?");
+                        $statusStmt->execute([$db_file, '%' . basename($plugin_file_normalized)]);
+                        $statusResult = $statusStmt->fetch(PDO::FETCH_ASSOC);
+                        if ($statusResult) {
+                            $db_status = $statusResult['status'];
+                        }
+                    } catch (Exception $e) {
+                        // Ignore
+                    }
+                    break;
+                }
+            }
+            
             // Use folder name as key (plugin slug)
             $installed_plugins[$plugin_slug] = [
                 'name' => $plugin['data']['Name'] ?? $plugin_slug,
-                'active' => in_array($plugin_file, $active_plugins) || in_array($plugin_file_normalized, $active_plugins),
+                'active' => in_array($plugin_file, $active_plugins) || 
+                           in_array($plugin_file_normalized, $active_plugins) ||
+                           ($is_in_db && $db_status === 'active'),
                 'file' => $plugin_file,
-                'file_normalized' => $plugin_file_normalized
+                'file_normalized' => $plugin_file_normalized,
+                'in_database' => $is_in_db
             ];
         }
     }
@@ -382,13 +442,32 @@ include 'includes/header.php';
                     // Check by folder name or file path
                     foreach ($installed_plugins as $installed_slug => $installed_data) {
                         $plugin_file = $installed_data['file'] ?? '';
+                        $plugin_file_normalized = $installed_data['file_normalized'] ?? '';
+                        
                         // Check if plugin slug matches folder name or is in file path
                         if (strpos($plugin_file, $plugin_slug) !== false || 
+                            strpos($plugin_file_normalized, $plugin_slug) !== false ||
                             basename(dirname($plugin_file)) === $plugin_slug ||
+                            basename(dirname($plugin_file_normalized)) === $plugin_slug ||
                             $installed_slug === $plugin_slug) {
                             $is_installed = true;
                             $is_active = $installed_data['active'];
                             break;
+                        }
+                    }
+                    
+                    // Also check database directly if not found
+                    if (!$is_installed && isset($conn)) {
+                        try {
+                            $checkStmt = $conn->prepare("SELECT status FROM plugins WHERE plugin_file LIKE ?");
+                            $checkStmt->execute(['%' . $plugin_slug . '%']);
+                            $db_result = $checkStmt->fetch(PDO::FETCH_ASSOC);
+                            if ($db_result) {
+                                $is_installed = true;
+                                $is_active = ($db_result['status'] === 'active');
+                            }
+                        } catch (Exception $e) {
+                            // Ignore
                         }
                     }
                 }

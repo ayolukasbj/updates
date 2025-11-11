@@ -162,7 +162,7 @@ class PluginLoader {
     /**
      * Get plugin header data
      */
-    private static function getPluginData($plugin_file) {
+    public static function getPluginData($plugin_file) {
         try {
             $default_headers = [
                 'Name' => 'Plugin Name',

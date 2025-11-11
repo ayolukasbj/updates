@@ -71,6 +71,64 @@ try {
         
         $all_plugins = PluginLoader::getPlugins();
         $active_plugins = PluginLoader::getActivePlugins();
+        
+        // Also check database for plugins that might not be detected by file scan
+        try {
+            $db = new Database();
+            $conn = $db->getConnection();
+            if ($conn) {
+                $checkTable = $conn->query("SHOW TABLES LIKE 'plugins'");
+                if ($checkTable->rowCount() > 0) {
+                    $stmt = $conn->query("SELECT plugin_file, status FROM plugins");
+                    $db_plugins = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                    
+                    // Add plugins from database that might not be in file system scan
+                    foreach ($db_plugins as $db_plugin) {
+                        $plugin_file = $db_plugin['plugin_file'];
+                        $plugin_file_normalized = str_replace('\\', '/', $plugin_file);
+                        
+                        // Check if this plugin is already in $all_plugins
+                        $found = false;
+                        foreach ($all_plugins as $existing_plugin) {
+                            $existing_file = str_replace('\\', '/', $existing_plugin['file'] ?? '');
+                            if (strpos($existing_file, $plugin_file_normalized) !== false ||
+                                strpos($plugin_file_normalized, $existing_file) !== false) {
+                                $found = true;
+                                break;
+                            }
+                        }
+                        
+                        // If not found and file exists, try to load it
+                        if (!$found) {
+                            // Try absolute path first
+                            $absolute_path = realpath(__DIR__ . '/../' . ltrim($plugin_file, '/'));
+                            if (!$absolute_path && file_exists($plugin_file)) {
+                                $absolute_path = $plugin_file;
+                            }
+                            
+                            if ($absolute_path && file_exists($absolute_path)) {
+                                try {
+                                    // Get plugin data using PluginLoader method
+                                    $plugin_data = PluginLoader::getPluginData($absolute_path);
+                                    if ($plugin_data) {
+                                        $plugin_slug = basename(dirname($absolute_path));
+                                        $all_plugins[$plugin_slug] = [
+                                            'file' => $absolute_path,
+                                            'data' => $plugin_data,
+                                            'folder' => $plugin_slug
+                                        ];
+                                    }
+                                } catch (Exception $e) {
+                                    error_log("Error loading plugin from database: " . $e->getMessage());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Error checking database for plugins: " . $e->getMessage());
+        }
     }
 } catch (Exception $e) {
     error_log("Error getting plugins: " . $e->getMessage());
