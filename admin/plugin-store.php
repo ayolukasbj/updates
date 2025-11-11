@@ -108,25 +108,7 @@ $page_title = 'Plugin Store';
 $success = '';
 $error = '';
 
-// Handle license server URL configuration
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_license_server'])) {
-    try {
-        if (!function_exists('update_option')) {
-            throw new Exception('Plugin API not loaded');
-        }
-        
-        $license_server_url = trim($_POST['license_server_url'] ?? '');
-        
-        if (!empty($license_server_url)) {
-            update_option('license_server_url', $license_server_url);
-            $success = 'License server URL saved successfully!';
-        }
-    } catch (Exception $e) {
-        $error = 'Error saving license server URL: ' . $e->getMessage();
-    }
-}
-
-// Get license key and license server URL
+// Get license key and license server URL FIRST (needed for fetching plugins)
 $license_key = '';
 $license_server_url = '';
 
@@ -218,6 +200,126 @@ try {
     }
 } catch (Exception $e) {
     error_log("Error loading license settings: " . $e->getMessage());
+}
+
+// Fetch available plugins from license server BEFORE handling installation
+// This ensures $available_plugins is populated when installation code runs
+$available_plugins = [];
+$license_server_status = 'unknown';
+$license_server_error = '';
+
+if (!empty($license_server_url)) {
+    try {
+        $store_url = rtrim($license_server_url, '/') . '/api/plugin-store.php?action=list';
+        if (!empty($license_key)) {
+            $store_url .= '&license_key=' . urlencode($license_key);
+        }
+        
+        error_log("Plugin Store: Fetching plugins from: {$store_url}");
+        
+        // Use cURL for better error handling
+        if (function_exists('curl_init')) {
+            $ch = curl_init($store_url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Music Platform Plugin Store/1.0');
+            
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curl_error = curl_error($ch);
+            curl_close($ch);
+            
+            if ($curl_error) {
+                $license_server_status = 'error';
+                $license_server_error = "Connection error: {$curl_error}";
+                error_log("Plugin Store: cURL error - {$curl_error}");
+            } elseif ($http_code !== 200) {
+                $license_server_status = 'error';
+                $license_server_error = "HTTP error: {$http_code}";
+                error_log("Plugin Store: HTTP error - {$http_code}");
+                if ($response) {
+                    $error_data = json_decode($response, true);
+                    if ($error_data && isset($error_data['error'])) {
+                        $license_server_error .= " - " . $error_data['error'];
+                    }
+                }
+            } else {
+                $license_server_status = 'connected';
+                if ($response) {
+                    $data = json_decode($response, true);
+                    if ($data && $data['success'] && isset($data['plugins'])) {
+                        $available_plugins = $data['plugins'];
+                        error_log("Plugin Store: Successfully fetched " . count($available_plugins) . " plugins");
+                    } else {
+                        $license_server_status = 'warning';
+                        $license_server_error = "Invalid response format from license server";
+                        error_log("Plugin Store: Invalid response format");
+                    }
+                }
+            }
+        } else {
+            // Fallback to file_get_contents
+            $context = stream_context_create([
+                'http' => [
+                    'timeout' => 10,
+                    'follow_location' => true,
+                    'ignore_errors' => true,
+                    'user_agent' => 'Music Platform Plugin Store/1.0'
+                ],
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false
+                ]
+            ]);
+            
+            $response = @file_get_contents($store_url, false, $context);
+            if ($response !== false) {
+                $license_server_status = 'connected';
+                $data = json_decode($response, true);
+                if ($data && $data['success'] && isset($data['plugins'])) {
+                    $available_plugins = $data['plugins'];
+                }
+            } else {
+                $license_server_status = 'error';
+                $license_server_error = "Failed to connect to license server";
+                $last_error = error_get_last();
+                if ($last_error) {
+                    $license_server_error .= ": " . $last_error['message'];
+                }
+            }
+        }
+    } catch (Exception $e) {
+        $license_server_status = 'error';
+        $license_server_error = $e->getMessage();
+        error_log("Plugin Store: Exception - " . $e->getMessage());
+    }
+} else {
+    $license_server_status = 'not_configured';
+    $license_server_error = "License server URL not configured";
+}
+
+// Handle license server URL configuration
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_license_server'])) {
+    try {
+        if (!function_exists('update_option')) {
+            throw new Exception('Plugin API not loaded');
+        }
+        
+        $license_server_url = trim($_POST['license_server_url'] ?? '');
+        
+        if (!empty($license_server_url)) {
+            update_option('license_server_url', $license_server_url);
+            $success = 'License server URL saved successfully!';
+            // Reload available plugins after saving URL
+            // (This will be done on next page load)
+        }
+    } catch (Exception $e) {
+        $error = 'Error saving license server URL: ' . $e->getMessage();
+    }
 }
 
 // Handle plugin installation
@@ -857,104 +959,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
     }
 }
 
-// Fetch available plugins from license server
-$available_plugins = [];
-$license_server_status = 'unknown';
-$license_server_error = '';
-
-if (!empty($license_server_url)) {
-    try {
-        $store_url = rtrim($license_server_url, '/') . '/api/plugin-store.php?action=list';
-        if (!empty($license_key)) {
-            $store_url .= '&license_key=' . urlencode($license_key);
-        }
-        
-        error_log("Plugin Store: Fetching plugins from: {$store_url}");
-        
-        // Use cURL for better error handling
-        if (function_exists('curl_init')) {
-            $ch = curl_init($store_url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-            curl_setopt($ch, CURLOPT_USERAGENT, 'Music Platform Plugin Store/1.0');
-            
-            $response = curl_exec($ch);
-            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $curl_error = curl_error($ch);
-            curl_close($ch);
-            
-            if ($curl_error) {
-                $license_server_status = 'error';
-                $license_server_error = "Connection error: {$curl_error}";
-                error_log("Plugin Store: cURL error - {$curl_error}");
-            } elseif ($http_code !== 200) {
-                $license_server_status = 'error';
-                $license_server_error = "HTTP error: {$http_code}";
-                error_log("Plugin Store: HTTP error - {$http_code}");
-                if ($response) {
-                    $error_data = json_decode($response, true);
-                    if ($error_data && isset($error_data['error'])) {
-                        $license_server_error .= " - " . $error_data['error'];
-                    }
-                }
-            } else {
-                $license_server_status = 'connected';
-                if ($response) {
-                    $data = json_decode($response, true);
-                    if ($data && $data['success'] && isset($data['plugins'])) {
-                        $available_plugins = $data['plugins'];
-                        error_log("Plugin Store: Successfully fetched " . count($available_plugins) . " plugins");
-                    } else {
-                        $license_server_status = 'warning';
-                        $license_server_error = "Invalid response format from license server";
-                        error_log("Plugin Store: Invalid response format");
-                    }
-                }
-            }
-        } else {
-            // Fallback to file_get_contents
-            $context = stream_context_create([
-                'http' => [
-                    'timeout' => 10,
-                    'follow_location' => true,
-                    'ignore_errors' => true,
-                    'user_agent' => 'Music Platform Plugin Store/1.0'
-                ],
-                'ssl' => [
-                    'verify_peer' => false,
-                    'verify_peer_name' => false
-                ]
-            ]);
-            
-            $response = @file_get_contents($store_url, false, $context);
-            if ($response !== false) {
-                $license_server_status = 'connected';
-                $data = json_decode($response, true);
-                if ($data && $data['success'] && isset($data['plugins'])) {
-                    $available_plugins = $data['plugins'];
-                }
-            } else {
-                $license_server_status = 'error';
-                $license_server_error = "Failed to connect to license server";
-                $last_error = error_get_last();
-                if ($last_error) {
-                    $license_server_error .= ": " . $last_error['message'];
-                }
-            }
-        }
-    } catch (Exception $e) {
-        $license_server_status = 'error';
-        $license_server_error = $e->getMessage();
-        error_log("Plugin Store: Exception - " . $e->getMessage());
-    }
-} else {
-    $license_server_status = 'not_configured';
-    $license_server_error = "License server URL not configured";
-}
+// Available plugins are already fetched BEFORE the installation handler (see above)
+// This ensures $available_plugins is populated when installation code runs
 
 // Get installed plugins
 $installed_plugins = [];
