@@ -247,6 +247,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
         $plugin_found_in_list = false;
         $actual_plugin_slug = $plugin_slug;
         
+        // Ensure $available_plugins is an array
+        if (!is_array($available_plugins)) {
+            $available_plugins = [];
+        }
+        
         foreach ($available_plugins as $available_plugin) {
             $available_slug = $available_plugin['plugin_slug'] ?? '';
             // Check exact match or case-insensitive match
@@ -281,9 +286,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                 
                 if ($verify_http_code === 404) {
                     // List available plugin slugs for debugging
-                    $available_slugs = array_map(function($p) { return $p['plugin_slug'] ?? ''; }, $available_plugins);
-                    $available_slugs_str = implode(', ', array_filter($available_slugs));
-                    throw new Exception("Plugin '{$plugin_slug}' not found on license server. Available plugins: " . ($available_slugs_str ?: 'none') . ". Please ensure the plugin has been uploaded to the license server at: {$license_server_url}");
+                    $available_slugs = [];
+                    if (is_array($available_plugins) && !empty($available_plugins)) {
+                        $available_slugs = array_map(function($p) { return $p['plugin_slug'] ?? ''; }, $available_plugins);
+                        $available_slugs = array_filter($available_slugs);
+                    }
+                    $available_slugs_str = !empty($available_slugs) ? implode(', ', $available_slugs) : 'none';
+                    throw new Exception("Plugin '{$plugin_slug}' not found on license server. Available plugins: {$available_slugs_str}. Please ensure the plugin has been uploaded to the license server at: {$license_server_url}");
                 } elseif ($verify_http_code !== 200) {
                     error_log("Plugin installation: Plugin verification returned HTTP {$verify_http_code}");
                     // Continue anyway, might still be able to download
