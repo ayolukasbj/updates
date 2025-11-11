@@ -303,62 +303,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                     }
                 }
                 
-                // If still not found, search for PHP files but exclude admin/ and includes/ folders
+                // If still not found, search for PHP files but STRICTLY exclude admin/ and includes/ folders
                 if (!file_exists($plugin_file)) {
-                    $all_php_files = glob($extract_dir . '**/*.php', GLOB_BRACE);
-                    if (empty($all_php_files)) {
-                        $all_php_files = glob($extract_dir . '*.php');
+                    // Use RecursiveIteratorIterator to get all PHP files
+                    $all_php_files = [];
+                    $search_dirs = [];
+                    
+                    if (is_dir($extract_dir . $plugin_slug)) {
+                        $search_dirs[] = $extract_dir . $plugin_slug;
+                    }
+                    $search_dirs[] = $extract_dir;
+                    
+                    foreach ($search_dirs as $search_dir) {
+                        if (!is_dir($search_dir)) continue;
+                        
+                        try {
+                            $iterator = new RecursiveIteratorIterator(
+                                new RecursiveDirectoryIterator($search_dir, RecursiveDirectoryIterator::SKIP_DOTS),
+                                RecursiveIteratorIterator::SELF_FIRST
+                            );
+                            
+                            foreach ($iterator as $file) {
+                                if ($file->isFile() && strtolower($file->getExtension()) === 'php') {
+                                    $all_php_files[] = $file->getPathname();
+                                }
+                            }
+                        } catch (Exception $e) {
+                            error_log("Plugin installation: Error scanning directory {$search_dir}: " . $e->getMessage());
+                        }
                     }
                     
-                    // Filter out admin/ and includes/ files, prioritize root-level files
-                    $root_files = [];
-                    $other_files = [];
+                    // Also check root level
+                    $root_files = glob($extract_dir . '*.php');
+                    if ($root_files) {
+                        $all_php_files = array_merge($all_php_files, $root_files);
+                    }
+                    
+                    // Filter out admin/, includes/, assets/ files completely - use normalized paths
+                    $valid_files = [];
+                    $extract_dir_normalized = str_replace('\\', '/', rtrim($extract_dir, '/\\'));
                     
                     foreach ($all_php_files as $php_file) {
-                        $relative = str_replace($extract_dir, '', $php_file);
-                        // Skip admin/, includes/, and other subdirectories
-                        if (strpos($relative, 'admin/') === 0 || 
-                            strpos($relative, 'includes/') === 0 ||
-                            strpos($relative, 'assets/') === 0) {
+                        $php_file_normalized = str_replace('\\', '/', $php_file);
+                        $relative = str_replace($extract_dir_normalized . '/', '', $php_file_normalized);
+                        
+                        // Skip any file in admin/, includes/, assets/ directories (case-insensitive, handle both / and \)
+                        if (preg_match('#(^|[/\\\\])(admin|includes|assets)([/\\\\]|$)#i', $relative)) {
+                            error_log("Plugin installation: SKIPPING excluded file: {$php_file} (relative: {$relative})");
                             continue;
                         }
                         
-                        // Check if it's in the plugin root folder
-                        if (strpos($relative, '/') === false || 
-                            strpos($relative, $plugin_slug . '/') === 0) {
-                            // Prioritize files named after plugin slug
-                            if (basename($php_file, '.php') === $plugin_slug) {
-                                array_unshift($root_files, $php_file);
+                        // Only consider files directly in plugin root or plugin-slug root (one level deep max)
+                        $parts = explode('/', $relative);
+                        if (count($parts) === 1 || (count($parts) === 2 && $parts[0] === $plugin_slug)) {
+                            // Check if file has Plugin Name header (preferred)
+                            $content = @file_get_contents($php_file);
+                            $has_header = $content && (
+                                stripos($content, 'Plugin Name:') !== false || 
+                                stripos($content, '* Plugin Name') !== false ||
+                                stripos($content, 'Plugin Name') !== false
+                            );
+                            
+                            if ($has_header) {
+                                // Prioritize files named after plugin slug
+                                if (basename($php_file, '.php') === $plugin_slug) {
+                                    array_unshift($valid_files, $php_file);
+                                } else {
+                                    $valid_files[] = $php_file;
+                                }
                             } else {
-                                $root_files[] = $php_file;
+                                // Only add files without header if they're named after plugin slug
+                                if (basename($php_file, '.php') === $plugin_slug) {
+                                    $valid_files[] = $php_file;
+                                }
                             }
-                        } else {
-                            $other_files[] = $php_file;
                         }
                     }
                     
-                    // Use root files first, then other files
-                    $php_files = array_merge($root_files, $other_files);
-                    
-                    if (!empty($php_files)) {
-                        $plugin_file = $php_files[0];
-                        error_log("Plugin installation: Using found PHP file: {$plugin_file}");
-                        
-                        // If file is in a subdirectory (but not admin/includes), ensure proper structure
-                        $relative_path = str_replace($extract_dir, '', $plugin_file);
-                        if (strpos($relative_path, '/') !== false && 
-                            strpos($relative_path, $plugin_slug . '/') !== 0) {
-                            // File is in wrong subdirectory, move to plugin folder
-                            $proper_dir = $extract_dir . $plugin_slug . '/';
-                            if (!is_dir($proper_dir)) {
-                                @mkdir($proper_dir, 0755, true);
-                            }
-                            $new_path = $proper_dir . basename($plugin_file);
-                            if (rename($plugin_file, $new_path)) {
-                                $plugin_file = $new_path;
-                                error_log("Plugin installation: Moved plugin file to: {$plugin_file}");
-                            }
-                        }
+                    if (!empty($valid_files)) {
+                        $plugin_file = $valid_files[0];
+                        error_log("Plugin installation: Using main plugin file: {$plugin_file}");
+                    } else {
+                        error_log("Plugin installation: No valid plugin file found. Searched " . count($all_php_files) . " PHP files.");
                     }
                 }
             }
@@ -368,19 +394,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                 throw new Exception('Main plugin file not found. Expected: ' . $plugin_slug . '.php in ' . $extract_dir);
             }
             
-            // Verify this is the main plugin file (check for plugin header)
+            // Verify this is the main plugin file (check for plugin header) - REQUIRED
             $file_content = @file_get_contents($plugin_file);
-            if ($file_content && (strpos($file_content, 'Plugin Name:') === false && strpos($file_content, 'Plugin Name') === false)) {
-                error_log("Plugin installation WARNING: File {$plugin_file} may not be the main plugin file (no Plugin Name header found)");
-                // Try to find the actual main plugin file
-                $all_files = glob($extract_dir . $plugin_slug . '/*.php');
-                foreach ($all_files as $test_file) {
-                    $test_content = @file_get_contents($test_file);
-                    if ($test_content && (strpos($test_content, 'Plugin Name:') !== false || strpos($test_content, 'Plugin Name') !== false)) {
-                        $plugin_file = $test_file;
-                        error_log("Plugin installation: Found main plugin file: {$plugin_file}");
-                        break;
+            $has_plugin_header = $file_content && (
+                stripos($file_content, 'Plugin Name:') !== false || 
+                stripos($file_content, '* Plugin Name') !== false ||
+                stripos($file_content, 'Plugin Name') !== false
+            );
+            
+            if (!$has_plugin_header) {
+                error_log("Plugin installation WARNING: File {$plugin_file} does not have Plugin Name header. Searching for main file...");
+                
+                // Try to find the actual main plugin file with header
+                $search_dirs = [];
+                if (is_dir($extract_dir . $plugin_slug)) {
+                    $search_dirs[] = $extract_dir . $plugin_slug;
+                }
+                $search_dirs[] = $extract_dir;
+                
+                $found_main_file = false;
+                foreach ($search_dirs as $search_dir) {
+                    if (!is_dir($search_dir)) continue;
+                    
+                    try {
+                        $iterator = new RecursiveIteratorIterator(
+                            new RecursiveDirectoryIterator($search_dir, RecursiveDirectoryIterator::SKIP_DOTS)
+                        );
+                        
+                        foreach ($iterator as $file) {
+                            if ($file->isFile() && strtolower($file->getExtension()) === 'php') {
+                                $test_file = $file->getPathname();
+                                $test_normalized = str_replace('\\', '/', $test_file);
+                                $test_relative = str_replace(str_replace('\\', '/', $extract_dir), '', $test_normalized);
+                                
+                                // Skip admin/includes/assets
+                                if (preg_match('#(^|[/\\\\])(admin|includes|assets)([/\\\\]|$)#i', $test_relative)) {
+                                    continue;
+                                }
+                                
+                                $test_content = @file_get_contents($test_file);
+                                if ($test_content && (
+                                    stripos($test_content, 'Plugin Name:') !== false || 
+                                    stripos($test_content, '* Plugin Name') !== false ||
+                                    stripos($test_content, 'Plugin Name') !== false
+                                )) {
+                                    $plugin_file = $test_file;
+                                    error_log("Plugin installation: Found main plugin file with header: {$plugin_file}");
+                                    $found_main_file = true;
+                                    break 2;
+                                }
+                            }
+                        }
+                    } catch (Exception $e) {
+                        error_log("Plugin installation: Error searching for main file in {$search_dir}: " . $e->getMessage());
                     }
+                }
+                
+                if (!$found_main_file) {
+                    throw new Exception('Main plugin file with "Plugin Name:" header not found in ' . $extract_dir . '. Please ensure your plugin has a main file with a Plugin Name header.');
                 }
             }
             
@@ -393,12 +464,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                 $plugins_base = realpath(__DIR__ . '/../plugins/');
                 $plugin_file_normalized = $plugin_file;
                 
+                // Normalize path separators first
+                $plugin_file_normalized = str_replace('\\', '/', $plugin_file_normalized);
+                $plugins_base_normalized = str_replace('\\', '/', $plugins_base);
+                
                 // Convert to relative path if absolute
-                if (strpos($plugin_file, $plugins_base) === 0) {
-                    $plugin_file_normalized = str_replace($plugins_base . DIRECTORY_SEPARATOR, '', $plugin_file);
-                    $plugin_file_normalized = str_replace('\\', '/', $plugin_file_normalized);
+                if (strpos($plugin_file_normalized, $plugins_base_normalized) === 0) {
+                    // File is in plugins directory
+                    $plugin_file_normalized = str_replace($plugins_base_normalized . '/', '', $plugin_file_normalized);
                     $plugin_file_normalized = 'plugins/' . $plugin_file_normalized;
+                } else {
+                    // File might be in extract_dir, need to move it to plugins directory first
+                    $extract_dir_normalized = str_replace('\\', '/', rtrim($extract_dir, '/\\'));
+                    if (strpos($plugin_file_normalized, $extract_dir_normalized) === 0) {
+                        // Extract relative path from extract_dir
+                        $relative_from_extract = str_replace($extract_dir_normalized . '/', '', $plugin_file_normalized);
+                        
+                        // Determine final plugin path
+                        $final_plugin_path = $plugins_base . '/' . $relative_from_extract;
+                        $final_plugin_dir = dirname($final_plugin_path);
+                        
+                        // Ensure plugin directory exists
+                        if (!is_dir($final_plugin_dir)) {
+                            @mkdir($final_plugin_dir, 0755, true);
+                        }
+                        
+                        // Move file to plugins directory if it's not already there
+                        if ($plugin_file_normalized !== str_replace('\\', '/', $final_plugin_path)) {
+                            if (file_exists($plugin_file)) {
+                                if (@copy($plugin_file, $final_plugin_path)) {
+                                    error_log("Plugin installation: Copied plugin file to: {$final_plugin_path}");
+                                    $plugin_file = $final_plugin_path;
+                                    $plugin_file_normalized = str_replace('\\', '/', $final_plugin_path);
+                                }
+                            }
+                        }
+                        
+                        // Normalize to relative path from plugins base
+                        $plugin_file_normalized = str_replace($plugins_base_normalized . '/', '', $plugin_file_normalized);
+                        $plugin_file_normalized = 'plugins/' . $plugin_file_normalized;
+                    } else {
+                        // Try to extract plugin slug and construct path
+                        if (preg_match('#([^/\\\\]+)[/\\\\]([^/\\\\]+\.php)$#', $plugin_file_normalized, $matches)) {
+                            $possible_slug = $matches[1];
+                            $filename = $matches[2];
+                            $plugin_file_normalized = 'plugins/' . $possible_slug . '/' . $filename;
+                        } else {
+                            // Last resort: use basename
+                            $plugin_file_normalized = 'plugins/' . $plugin_slug . '/' . basename($plugin_file_normalized);
+                        }
+                    }
                 }
+                
+                // Final validation: ensure path doesn't contain admin/includes/assets
+                if (preg_match('#plugins/[^/]+/(admin|includes|assets)/#i', $plugin_file_normalized)) {
+                    error_log("Plugin installation ERROR: Detected excluded directory in path: {$plugin_file_normalized}");
+                    throw new Exception('Invalid plugin file path detected. The main plugin file cannot be in admin/, includes/, or assets/ directories.');
+                }
+                
+                error_log("Plugin installation: Normalized plugin file path: {$plugin_file_normalized}");
                 
                 // Activate the plugin (this saves it to database)
                 error_log("Attempting to activate plugin: {$plugin_file_normalized}");
