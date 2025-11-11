@@ -477,11 +477,6 @@ include 'includes/header.php';
 </div>
 <?php endif; ?>
 
-<?php 
-// Clean output buffer before displaying page
-ob_end_clean();
-?>
-
 <?php if ($init_error): ?>
 <div class="alert alert-danger" style="margin: 20px;">
     <i class="fas fa-exclamation-triangle"></i> <strong>Initialization Error:</strong> <?php echo htmlspecialchars($init_error); ?>

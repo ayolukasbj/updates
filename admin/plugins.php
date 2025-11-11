@@ -258,11 +258,6 @@ try {
 include 'includes/header.php';
 ?>
 
-<?php 
-// Clean output buffer before displaying page
-ob_end_clean();
-?>
-
 <div class="page-header">
     <h1><i class="fas fa-puzzle-piece"></i> Plugin Management</h1>
     <p>Manage and activate third-party plugins to extend your music platform functionality.</p>
