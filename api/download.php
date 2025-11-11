@@ -238,13 +238,23 @@ try {
             $site_clean = preg_replace('/[^a-zA-Z0-9_\-\[\]() ]/', '', $site_name);
             
             // Generate filename from template
-            $generated_filename = str_replace(
-                ['{TITLE}', '{ARTIST}', '{SITE_NAME}'],
-                [$title_clean, $artist_clean, $site_clean],
-                $filename_template
-            );
-            $generated_filename = preg_replace('/[^a-zA-Z0-9_\-\[\]() ]/', '', $generated_filename);
-            $generated_filename = trim($generated_filename);
+            // Default format: songtitle-by-artistes-sitename
+            if (empty($filename_template) || $filename_template === '{TITLE} by {ARTIST} [{SITE_NAME}]') {
+                // Use the new format: songtitle-by-artistes-sitename
+                $generated_filename = strtolower($title_clean) . '-by-' . strtolower($artist_clean) . '-' . strtolower($site_clean);
+                $generated_filename = preg_replace('/[^a-zA-Z0-9\-]/', '', $generated_filename);
+                $generated_filename = preg_replace('/-+/', '-', $generated_filename);
+                $generated_filename = trim($generated_filename, '-');
+            } else {
+                // Use custom template
+                $generated_filename = str_replace(
+                    ['{TITLE}', '{ARTIST}', '{SITE_NAME}'],
+                    [$title_clean, $artist_clean, $site_clean],
+                    $filename_template
+                );
+                $generated_filename = preg_replace('/[^a-zA-Z0-9_\-\[\]() ]/', '', $generated_filename);
+                $generated_filename = trim($generated_filename);
+            }
             
             // Use generated filename or actual filename if it looks like it matches the pattern
             if (!empty($generated_filename)) {
@@ -276,7 +286,14 @@ try {
     
     // Fallback to default filename if template didn't work
     if (empty($filename)) {
-        $filename = sanitize_filename($song['title'] . ' by ' . $artist_string . '.mp3');
+        // Use new format: songtitle-by-artistes-sitename
+        $title_clean = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $song['title']);
+        $artist_clean = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $artist_string);
+        $site_clean = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $site_name);
+        $filename = strtolower($title_clean) . '-by-' . strtolower($artist_clean) . '-' . strtolower($site_clean);
+        $filename = preg_replace('/[^a-zA-Z0-9\-]/', '', $filename);
+        $filename = preg_replace('/-+/', '-', $filename);
+        $filename = trim($filename, '-') . '.mp3';
     } else {
         // Sanitize the generated filename
         $filename = sanitize_filename($filename);
@@ -464,21 +481,14 @@ try {
         ob_end_clean();
     }
     
-    // Stream file with variable chunk sizes and random delays to prevent IDM detection
+    // Stream file immediately - start download right away
     $handle = fopen($audio_file, 'rb');
     
-    // Random initial delay to confuse download managers
-    usleep(rand(50000, 150000)); // 50-150ms random delay
-    
-    $chunk_sizes = [4096, 8192, 12288, 16384]; // Variable chunk sizes
-    $chunk_index = 0;
+    // Use larger chunk size for faster streaming
+    $chunk_size = 8192; // 8KB chunks for optimal performance
     $bytes_sent = 0;
     
     while (!feof($handle)) {
-        // Use variable chunk sizes to prevent pattern detection
-        $chunk_size = $chunk_sizes[$chunk_index % count($chunk_sizes)];
-        $chunk_index++;
-        
         $chunk = fread($handle, $chunk_size);
         if ($chunk === false || strlen($chunk) === 0) {
             break;
@@ -487,12 +497,7 @@ try {
         echo $chunk;
         $bytes_sent += strlen($chunk);
         
-        // Random micro-delays every few chunks to prevent IDM detection
-        if ($chunk_index % 10 === 0) {
-            usleep(rand(1000, 5000)); // 1-5ms random delay
-        }
-        
-        // Flush immediately
+        // Flush immediately for faster download start
         flush();
         if (ob_get_level()) {
             ob_end_flush();

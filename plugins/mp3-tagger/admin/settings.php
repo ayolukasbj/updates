@@ -53,6 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_settings'])) {
         $enable_auto_tagging = isset($_POST['enable_auto_tagging']) ? '1' : '0';
         update_option('id3_auto_tagging_enabled', $enable_auto_tagging);
         
+        $enable_auto_sync = isset($_POST['enable_auto_sync']) ? '1' : '0';
+        update_option('id3_auto_sync_enabled', $enable_auto_sync);
+        
         $success = 'ID3 tag settings saved successfully!';
     } catch (Exception $e) {
         $error = 'Error saving settings: ' . $e->getMessage();
@@ -75,6 +78,7 @@ $current_templates = [
 ];
 
 $enable_auto_tagging = get_option('id3_auto_tagging_enabled', '1');
+$enable_auto_sync = get_option('id3_auto_sync_enabled', '0');
 $tab = $GLOBALS['mp3_tagger_tab'] ?? $_GET['tab'] ?? 'settings';
 ?>
 
@@ -118,6 +122,15 @@ $tab = $GLOBALS['mp3_tagger_tab'] ?? $_GET['tab'] ?? 'settings';
                     <input type="checkbox" name="enable_auto_tagging" value="1" <?php echo $enable_auto_tagging === '1' ? 'checked' : ''; ?>>
                     Enable automatic ID3 tagging for uploaded MP3 files
                 </label>
+                <small class="text-muted">Automatically tag MP3 files when they are uploaded</small>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="enable_auto_sync" value="1" <?php echo $enable_auto_sync === '1' ? 'checked' : ''; ?>>
+                    Enable automatic sync of ID3 tags for newly added MP3 files
+                </label>
+                <small class="text-muted">Automatically scan and tag newly added MP3 files in the server (runs in background)</small>
             </div>
             
             <div class="alert alert-info">
