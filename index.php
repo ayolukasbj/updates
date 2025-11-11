@@ -1,17 +1,12 @@
 <?php
 // index.php - Homepage (Howwe.ug style)
 
-// Enable error reporting for debugging (disable in production)
-// Set DEBUG_MODE to true in config to see errors
-$debug_mode = defined('DEBUG_MODE') && DEBUG_MODE === true;
-if ($debug_mode) {
-    error_reporting(E_ALL);
-    ini_set('display_errors', 1);
-} else {
-    error_reporting(E_ALL);
-    ini_set('display_errors', 0);
-    ini_set('log_errors', 1);
-}
+// Production Error Handling
+// Errors are logged but not displayed to users
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/logs/php-errors.log');
 
 // Wrap in try-catch to prevent HTTP 500
 try {
@@ -184,7 +179,7 @@ try {
 $featured_songs = [];
 try {
     $featured_songs = getFeaturedSongs(6);
-    error_log("index.php: getFeaturedSongs returned " . count($featured_songs) . " songs");
+    // Debug logging removed for production
 } catch (Exception $e) {
     error_log("Error getting featured songs: " . $e->getMessage());
     $featured_songs = [];
@@ -215,7 +210,7 @@ try {
         ");
         $stmt->execute();
         $recent_songs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        error_log("index.php: Found " . count($recent_songs) . " recent songs");
+        // Debug logging removed for production
     } else {
         error_log("index.php: Database connection failed");
         $recent_songs = [];
@@ -2436,7 +2431,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
 
         <!-- 2. Political News -->
         <?php 
-        error_log("DEBUG index.php: politics_news count - " . count($politics_news ?? []));
+        // Debug logging removed for production
         if (!empty($politics_news)): ?>
         <div style="margin: 40px 0;">
             <?php 
@@ -2995,7 +2990,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
 
         <!-- 5. Trending Songs -->
         <?php 
-        error_log("DEBUG index.php: trending_songs count - " . count($trending_songs ?? []));
+        // Debug logging removed for production
         if (!empty($trending_songs)): ?>
         <div style="margin: 40px 0;">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">

@@ -1,0 +1,58 @@
+# Files to be deleted from live server
+# This file lists all files that were deleted locally and should be removed from the live server
+# Format: One file path per line (relative to root)
+
+# Debug files removed
+debug-upload2.php
+debug-upload.php
+debug-step3.php
+debug-song-artist.php
+debug-live.php
+debug-homepage.php
+debug-dashboard.php
+debug-artist-dashboard.php
+index-debug.php
+edit-song-debug.php
+dashboard-debug-step.php
+
+# Test files removed
+test.php
+test-zindex.php
+test-song-display.php
+test-setup.php
+test-rewrite.php
+test-profile-update.php
+test-previous-values.php
+test-installation.php
+test-installation-flow.php
+test-edit-song.php
+test-dashboard-components.php
+test-collaboration.php
+test-artist-lookup.php
+install-test.php
+dashboard-test.php
+
+# Admin debug/test files removed
+admin/debug.php
+admin/debug-songs.php
+admin/debug-news.php
+admin/debug-dashboard.php
+admin/test.php
+admin/test-update-connection.php
+admin/test-spacing.php
+admin/test-songs.php
+admin/test-simple.php
+admin/test-plugin-system.php
+admin/test-mp3-tagger-router.php
+admin/test-mobile.php
+admin/test-loader-only.php
+admin/test-header.php
+admin/test-dashboard.php
+
+# API/AJAX test files removed
+api/test-stream.php
+ajax/test.php
+
+# Production cleanup script (should be removed after use)
+production-cleanup.php
+

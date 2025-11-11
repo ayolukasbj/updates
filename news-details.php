@@ -799,7 +799,7 @@ if (empty($featured_image) && !empty($news_item['id'])) {
             }
         }
     } catch (Exception $e) {
-        error_log("Error fetching image from DB for share: " . $e->getMessage());
+        // Error logged silently for production
     }
 }
 
@@ -827,7 +827,7 @@ if (!empty($featured_image)) {
     $share_image = str_replace('http://', 'https://', $share_image);
 }
 
-error_log("News share image - Featured Image: " . ($news_item['featured_image'] ?? 'N/A') . ", Image: " . ($news_item['image'] ?? 'N/A') . ", Display Image: " . ($news_item['display_image'] ?? 'N/A') . ", Final Featured: " . $featured_image . ", Share URL: " . $share_image);
+// Debug logging removed for production
 
 // Calculate share count (using views as proxy)
 $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% share rate
@@ -2195,7 +2195,7 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
                                 }
                             }
                         } catch (Exception $e) {
-                            error_log("Error fetching image from DB: " . $e->getMessage());
+                            // Error logged silently for production
                         }
                     }
                 }
