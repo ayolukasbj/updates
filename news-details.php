@@ -819,8 +819,11 @@ if (!empty($featured_image_for_share)) {
         $featured_image_for_share = ltrim($featured_image_for_share, '/');
         $share_image = $site_url . '/' . $featured_image_for_share;
     }
+    // Ensure HTTPS for WhatsApp compatibility
+    $share_image = str_replace('http://', 'https://', $share_image);
 } else {
     $share_image = $site_url . '/assets/images/default-news.jpg';
+    $share_image = str_replace('http://', 'https://', $share_image);
 }
 
 error_log("News share image - Using EXACT same logic as page display. Image: " . $featured_image_for_share . ", Final URL: " . $share_image);
@@ -851,11 +854,13 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
     <meta property="og:description" content="<?php echo $share_description; ?>">
     <?php if (!empty($share_image)): ?>
     <meta property="og:image" content="<?php echo htmlspecialchars($share_image); ?>">
-    <meta property="og:image:secure_url" content="<?php echo htmlspecialchars(str_replace('http://', 'https://', $share_image)); ?>">
+    <meta property="og:image:secure_url" content="<?php echo htmlspecialchars($share_image); ?>">
+    <meta property="og:image:url" content="<?php echo htmlspecialchars($share_image); ?>">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:image:type" content="image/jpeg">
     <meta property="og:image:alt" content="<?php echo htmlspecialchars($share_title); ?>">
+    <meta name="image" content="<?php echo htmlspecialchars($share_image); ?>">
     <?php endif; ?>
     <meta property="og:site_name" content="<?php echo htmlspecialchars(defined('SITE_NAME') ? SITE_NAME : ''); ?>">
     

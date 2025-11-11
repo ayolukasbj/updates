@@ -1455,22 +1455,16 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
             }
         }
         
-        /* Trending Songs Grid - Mobile: 2 columns, Desktop: auto-fill */
+        /* Trending Songs Grid - Mobile: 2 columns, Desktop: 1 column */
         .trending-songs-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
             gap: 20px;
         }
         
-        @media (min-width: 768px) {
-            .trending-songs-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
-        }
-        
         @media (min-width: 1024px) {
             .trending-songs-grid {
-                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+                grid-template-columns: repeat(1, 1fr);
             }
         }
 
@@ -2278,7 +2272,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                     <h2 style="font-size: 20px; font-weight: 700; color: #2c3e50; margin-bottom: 15px;">Recently Uploaded Songs</h2>
                     <div style="background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden; padding: 15px;">
                         <?php 
-                        // Get recently uploaded songs for sidebar (limit 7)
+                        // Get recently uploaded songs for sidebar (limit 6)
                         $sidebar_recent_songs = [];
                         try {
                             if ($conn) {
@@ -2293,7 +2287,7 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                                     LEFT JOIN users u ON s.uploaded_by = u.id
                                     WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
                                     ORDER BY s.id DESC
-                                    LIMIT 7
+                                    LIMIT 6
                                 ");
                                 $sidebarStmt->execute();
                                 $sidebar_recent_songs = $sidebarStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2658,99 +2652,226 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
             </div>
             <?php endif; ?>
             
-            <!-- Featured Songs Sidebar -->
-            <?php if (!empty($featured_songs)): ?>
-            <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-                <div style="background: #9C27B0; color: white; padding: 15px 20px; font-weight: 700; font-size: 16px; text-transform: uppercase;">
-                    Featured Music
-                </div>
-                <div style="padding: 0;">
-                    <?php foreach (array_slice($featured_songs, 0, 6) as $newSong): 
-                        // Generate song slug
-                        $newTitleSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $newSong['title']));
-                        $newTitleSlug = preg_replace('/\s+/', '-', trim($newTitleSlug));
-                        $newArtistForSlug = $newSong['artist'] ?? 'unknown-artist';
-                        $newArtistSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $newArtistForSlug));
-                        $newArtistSlug = preg_replace('/\s+/', '-', trim($newArtistSlug));
-                        $newSongSlug = $newTitleSlug . '-by-' . $newArtistSlug;
-                    ?>
-                    <a href="/song/<?php echo urlencode($newSongSlug); ?>" style="display: flex; gap: 15px; padding: 15px; border-bottom: 1px solid #f0f0f0; text-decoration: none; color: inherit; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa'; this.style.paddingLeft='20px'; this.style.paddingRight='20px'; this.style.marginLeft='-20px'; this.style.marginRight='-20px';" onmouseout="this.style.background='transparent'; this.style.paddingLeft='15px'; this.style.paddingRight='15px'; this.style.marginLeft='0'; this.style.marginRight='0';">
-                        <div style="width: 100px; height: 70px; flex-shrink: 0; border-radius: 4px; overflow: hidden; position: relative;">
-                            <?php if (!empty($newSong['cover_art'])): ?>
-                            <img src="<?php echo htmlspecialchars($newSong['cover_art']); ?>" alt="<?php echo htmlspecialchars($newSong['title']); ?>" style="width: 100%; height: 100%; object-fit: cover;">
-                            <?php else: ?>
-                            <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-size: 20px;">
-                                <i class="fas fa-music"></i>
-                            </div>
-                            <?php endif; ?>
-                            <div class="play-overlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s;">
-                                <i class="fas fa-play" style="color: white; font-size: 20px;"></i>
-                            </div>
-                        </div>
-                        <div style="flex: 1;">
-                            <div style="font-size: 14px; font-weight: 600; color: #333; margin-bottom: 8px; line-height: 1.4;">
-                                <?php echo htmlspecialchars($newSong['title']); ?>
-                            </div>
-                            <div style="font-size: 12px; color: #E91E63; margin-bottom: 5px;">
-                                <?php 
-                                // Display collaboration artists if applicable
-                                $newDisplayArtist = $newSong['artist'] ?? 'Unknown Artist';
-                                if (!empty($newSong['is_collaboration']) || !empty($newSong['id'])) {
-                                    try {
-                                        $new_all_artist_names = [];
-                                        
-                                        // Get uploader
-                                        if (!empty($newSong['uploaded_by'])) {
-                                            $newUploaderStmt = $conn->prepare("SELECT username FROM users WHERE id = ?");
-                                            $newUploaderStmt->execute([$newSong['uploaded_by']]);
-                                            $newUploader = $newUploaderStmt->fetch(PDO::FETCH_ASSOC);
-                                            if ($newUploader && !empty($newUploader['username'])) {
-                                                $new_all_artist_names[] = htmlspecialchars($newUploader['username']);
-                                            }
-                                        }
-                                        
-                                        // Get collaborators
-                                        $newCollabStmt = $conn->prepare("
-                                            SELECT DISTINCT sc.user_id, COALESCE(u.username, sc.user_id) as artist_name
-                                            FROM song_collaborators sc
-                                            LEFT JOIN users u ON sc.user_id = u.id
-                                            WHERE sc.song_id = ?
-                                            ORDER BY sc.added_at ASC
-                                        ");
-                                        $newCollabStmt->execute([$newSong['id']]);
-                                        $newCollaborators = $newCollabStmt->fetchAll(PDO::FETCH_ASSOC);
-                                        
-                                        if (!empty($newCollaborators)) {
-                                            foreach ($newCollaborators as $c) {
-                                                $collab_name = $c['artist_name'] ?? 'Unknown';
-                                                if (!in_array($collab_name, $new_all_artist_names)) {
-                                                    $new_all_artist_names[] = $collab_name;
-                                                }
-                                            }
-                                        }
-                                        
-                                        // Build display artist string
-                                        if (count($new_all_artist_names) > 1) {
-                                            $newDisplayArtist = $new_all_artist_names[0] . ' ft ' . implode(', ', array_slice($new_all_artist_names, 1));
-                                        } elseif (count($new_all_artist_names) == 1) {
-                                            $newDisplayArtist = $new_all_artist_names[0];
-                                        }
-                                    } catch (Exception $e) {
-                                        error_log("New song artist error: " . $e->getMessage());
+            <!-- Music Chart Sidebar -->
+            <div class="music-chart-sidebar" style="display: flex; flex-direction: column; gap: 20px;">
+                <?php
+                // Get Most Played Songs
+                $most_played_songs = [];
+                try {
+                    if ($conn) {
+                        $mostPlayedStmt = $conn->prepare("
+                            SELECT s.*, 
+                                   s.uploaded_by,
+                                   COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
+                                   COALESCE(s.plays, 0) as plays,
+                                   COALESCE(s.downloads, 0) as downloads
+                            FROM songs s
+                            LEFT JOIN users u ON s.uploaded_by = u.id
+                            WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
+                            ORDER BY s.plays DESC, s.downloads DESC, s.id DESC
+                            LIMIT 5
+                        ");
+                        $mostPlayedStmt->execute();
+                        $most_played_songs = $mostPlayedStmt->fetchAll(PDO::FETCH_ASSOC);
+                    }
+                } catch (Exception $e) {
+                    error_log("Most Played Songs Error: " . $e->getMessage());
+                }
+                
+                // Get Top Artists
+                $top_artists = [];
+                try {
+                    if ($conn) {
+                        $topArtistsStmt = $conn->prepare("
+                            SELECT u.id, u.username, 
+                                   COUNT(DISTINCT s.id) as songs_count,
+                                   COALESCE(SUM(s.plays), 0) as total_plays,
+                                   COALESCE(SUM(s.downloads), 0) as total_downloads
+                            FROM users u
+                            LEFT JOIN songs s ON s.uploaded_by = u.id AND (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
+                            WHERE u.username IS NOT NULL
+                            GROUP BY u.id, u.username
+                            HAVING songs_count > 0
+                            ORDER BY total_plays DESC, total_downloads DESC, songs_count DESC
+                            LIMIT 5
+                        ");
+                        $topArtistsStmt->execute();
+                        $top_artists = $topArtistsStmt->fetchAll(PDO::FETCH_ASSOC);
+                    }
+                } catch (Exception $e) {
+                    error_log("Top Artists Error: " . $e->getMessage());
+                }
+                
+                // Get Quick Stats
+                $quick_stats = [
+                    'total_songs' => 0,
+                    'total_artists' => 0,
+                    'total_plays' => 0,
+                    'total_downloads' => 0
+                ];
+                try {
+                    if ($conn) {
+                        $statsStmt = $conn->query("
+                            SELECT 
+                                COUNT(DISTINCT s.id) as total_songs,
+                                COUNT(DISTINCT s.uploaded_by) as total_artists,
+                                COALESCE(SUM(s.plays), 0) as total_plays,
+                                COALESCE(SUM(s.downloads), 0) as total_downloads
+                            FROM songs s
+                            WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
+                        ");
+                        $stats = $statsStmt->fetch(PDO::FETCH_ASSOC);
+                        if ($stats) {
+                            $quick_stats = [
+                                'total_songs' => (int)$stats['total_songs'],
+                                'total_artists' => (int)$stats['total_artists'],
+                                'total_plays' => (int)$stats['total_plays'],
+                                'total_downloads' => (int)$stats['total_downloads']
+                            ];
+                        }
+                    }
+                } catch (Exception $e) {
+                    error_log("Quick Stats Error: " . $e->getMessage());
+                }
+                ?>
+                
+                <!-- Most Played Songs -->
+                <?php if (!empty($most_played_songs)): ?>
+                <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <div style="background: #2196F3; color: white; padding: 12px 20px; font-weight: 700; font-size: 14px; text-transform: uppercase;">
+                        Most Played Songs
+                    </div>
+                    <div style="padding: 0;">
+                        <?php foreach ($most_played_songs as $index => $song): 
+                            $songTitleSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $song['title'] ?? ''));
+                            $songTitleSlug = preg_replace('/\s+/', '-', trim($songTitleSlug));
+                            $songArtistForSlug = $song['artist'] ?? 'unknown-artist';
+                            if (!empty($song['uploaded_by']) && $conn) {
+                                try {
+                                    $slugUploaderStmt = $conn->prepare("SELECT username FROM users WHERE id = ?");
+                                    $slugUploaderStmt->execute([$song['uploaded_by']]);
+                                    $slugUploader = $slugUploaderStmt->fetch(PDO::FETCH_ASSOC);
+                                    if ($slugUploader && !empty($slugUploader['username'])) {
+                                        $songArtistForSlug = $slugUploader['username'];
                                     }
-                                }
-                                echo htmlspecialchars($newDisplayArtist);
-                                ?>
+                                } catch (Exception $e) {}
+                            }
+                            $songArtistSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $songArtistForSlug));
+                            $songArtistSlug = preg_replace('/\s+/', '-', trim($songArtistSlug));
+                            $songSlug = $songTitleSlug . '-by-' . $songArtistSlug;
+                            $songUrl = base_url('song/' . $songSlug);
+                        ?>
+                        <a href="<?php echo $songUrl; ?>" style="display: flex; gap: 12px; padding: 12px; border-bottom: <?php echo $index < count($most_played_songs) - 1 ? '1px solid #f0f0f0' : 'none'; ?>; text-decoration: none; color: inherit; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa';" onmouseout="this.style.background='transparent';">
+                            <div style="width: 50px; height: 50px; flex-shrink: 0; border-radius: 4px; overflow: hidden;">
+                                <?php if (!empty($song['cover_art'])): ?>
+                                <img src="<?php echo htmlspecialchars($song['cover_art']); ?>" alt="<?php echo htmlspecialchars($song['title'] ?? 'Song'); ?>" style="width: 100%; height: 100%; object-fit: cover;">
+                                <?php else: ?>
+                                <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-size: 16px;">
+                                    <i class="fas fa-music"></i>
+                                </div>
+                                <?php endif; ?>
                             </div>
-                            <div style="font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.5px;">
-                                <?php echo number_format($newSong['plays'] ?? 0); ?> plays | <?php echo number_format($newSong['downloads'] ?? 0); ?> Downloads
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-size: 13px; font-weight: 600; color: #333; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <?php echo htmlspecialchars($song['title'] ?? 'Unknown Title'); ?>
+                                </div>
+                                <div style="font-size: 11px; color: #666; margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <?php echo htmlspecialchars($song['artist'] ?? 'Unknown Artist'); ?>
+                                </div>
+                                <div style="font-size: 10px; color: #999;">
+                                    <i class="fas fa-play"></i> <?php echo number_format($song['plays'] ?? 0); ?>
+                                </div>
                             </div>
-                        </div>
-                    </a>
-                    <?php endforeach; ?>
+                        </a>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
+                <?php endif; ?>
+                
+                <!-- Top Artists -->
+                <?php if (!empty($top_artists)): ?>
+                <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <div style="background: #E91E63; color: white; padding: 12px 20px; font-weight: 700; font-size: 14px; text-transform: uppercase;">
+                        Top Artists
+                    </div>
+                    <div style="padding: 0;">
+                        <?php foreach ($top_artists as $index => $artist): 
+                            $artistSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $artist['username'] ?? ''));
+                            $artistSlug = preg_replace('/\s+/', '-', trim($artistSlug));
+                            $artistUrl = base_url('artist/' . $artistSlug);
+                        ?>
+                        <a href="<?php echo $artistUrl; ?>" style="display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: <?php echo $index < count($top_artists) - 1 ? '1px solid #f0f0f0' : 'none'; ?>; text-decoration: none; color: inherit; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa';" onmouseout="this.style.background='transparent';">
+                            <div style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px;">
+                                <?php echo strtoupper(substr($artist['username'] ?? 'A', 0, 1)); ?>
+                            </div>
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-size: 13px; font-weight: 600; color: #333; margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <?php echo htmlspecialchars($artist['username'] ?? 'Unknown Artist'); ?>
+                                </div>
+                                <div style="font-size: 10px; color: #999;">
+                                    <?php echo number_format($artist['songs_count'] ?? 0); ?> songs • <i class="fas fa-play"></i> <?php echo number_format($artist['total_plays'] ?? 0); ?>
+                                </div>
+                            </div>
+                        </a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
+                
+                <!-- Featured Music -->
+                <?php if (!empty($featured_songs)): ?>
+                <div style="background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                    <div style="background: #9C27B0; color: white; padding: 12px 20px; font-weight: 700; font-size: 14px; text-transform: uppercase;">
+                        Featured Music
+                    </div>
+                    <div style="padding: 0;">
+                        <?php foreach (array_slice($featured_songs, 0, 5) as $index => $newSong): 
+                            // Generate song slug
+                            $newTitleSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $newSong['title'] ?? ''));
+                            $newTitleSlug = preg_replace('/\s+/', '-', trim($newTitleSlug));
+                            $newArtistForSlug = $newSong['artist'] ?? 'unknown-artist';
+                            if (!empty($newSong['uploaded_by']) && $conn) {
+                                try {
+                                    $slugUploaderStmt = $conn->prepare("SELECT username FROM users WHERE id = ?");
+                                    $slugUploaderStmt->execute([$newSong['uploaded_by']]);
+                                    $slugUploader = $slugUploaderStmt->fetch(PDO::FETCH_ASSOC);
+                                    if ($slugUploader && !empty($slugUploader['username'])) {
+                                        $newArtistForSlug = $slugUploader['username'];
+                                    }
+                                } catch (Exception $e) {}
+                            }
+                            $newArtistSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $newArtistForSlug));
+                            $newArtistSlug = preg_replace('/\s+/', '-', trim($newArtistSlug));
+                            $newSongSlug = $newTitleSlug . '-by-' . $newArtistSlug;
+                            $newSongUrl = base_url('song/' . $newSongSlug);
+                        ?>
+                        <a href="<?php echo $newSongUrl; ?>" style="display: flex; gap: 12px; padding: 12px; border-bottom: <?php echo $index < min(4, count($featured_songs) - 1) ? '1px solid #f0f0f0' : 'none'; ?>; text-decoration: none; color: inherit; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa';" onmouseout="this.style.background='transparent';">
+                            <div style="width: 50px; height: 50px; flex-shrink: 0; border-radius: 4px; overflow: hidden;">
+                                <?php if (!empty($newSong['cover_art'])): ?>
+                                <img src="<?php echo htmlspecialchars($newSong['cover_art']); ?>" alt="<?php echo htmlspecialchars($newSong['title'] ?? 'Song'); ?>" style="width: 100%; height: 100%; object-fit: cover;">
+                                <?php else: ?>
+                                <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-size: 16px;">
+                                    <i class="fas fa-music"></i>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-size: 13px; font-weight: 600; color: #333; margin-bottom: 4px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <?php echo htmlspecialchars($newSong['title'] ?? 'Unknown Title'); ?>
+                                </div>
+                                <div style="font-size: 11px; color: #666; margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <?php echo htmlspecialchars($newSong['artist'] ?? 'Unknown Artist'); ?>
+                                </div>
+                                <div style="font-size: 10px; color: #999;">
+                                    <i class="fas fa-play"></i> <?php echo number_format($newSong['plays'] ?? 0); ?> • <i class="fas fa-download"></i> <?php echo number_format($newSong['downloads'] ?? 0); ?>
+                                </div>
+                            </div>
+                        </a>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
             </div>
-            <?php endif; ?>
         </div>
         <?php endif; ?>
         
