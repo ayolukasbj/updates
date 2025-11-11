@@ -7,7 +7,8 @@
 require_once 'auth-check.php';
 require_once __DIR__ . '/../config/database.php';
 
-// Load plugin system with error handling
+// Load plugin system with comprehensive error handling
+$plugin_system_error = '';
 try {
     if (file_exists(__DIR__ . '/../includes/plugin-loader.php')) {
         require_once __DIR__ . '/../includes/plugin-loader.php';
@@ -23,11 +24,26 @@ try {
     
     // Initialize plugin system
     if (class_exists('PluginLoader')) {
-        PluginLoader::init();
+        try {
+            PluginLoader::init();
+        } catch (Exception $e) {
+            error_log("PluginLoader::init() error: " . $e->getMessage());
+            $plugin_system_error = 'Plugin system initialization failed: ' . $e->getMessage();
+        } catch (Error $e) {
+            error_log("PluginLoader::init() fatal error: " . $e->getMessage());
+            $plugin_system_error = 'Plugin system initialization failed. Please check error logs.';
+        }
+    } else {
+        $plugin_system_error = 'PluginLoader class not found after loading plugin system files.';
     }
 } catch (Exception $e) {
     error_log("Plugin system error: " . $e->getMessage());
-    die("Plugin system error: " . $e->getMessage());
+    error_log("Stack trace: " . $e->getTraceAsString());
+    $plugin_system_error = 'Plugin system error: ' . $e->getMessage();
+} catch (Error $e) {
+    error_log("Plugin system fatal error: " . $e->getMessage());
+    error_log("File: " . $e->getFile() . " Line: " . $e->getLine());
+    $plugin_system_error = 'Plugin system fatal error. Please check error logs.';
 }
 
 $page_title = 'Plugin Management';
@@ -42,6 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (empty($action) || empty($plugin_file)) {
             $error = 'Invalid request. Missing action or plugin file.';
+        } elseif (!class_exists('PluginLoader')) {
+            $error = 'Plugin system not loaded. Cannot perform plugin actions.';
         } elseif ($action === 'activate') {
             if (PluginLoader::activatePlugin($plugin_file)) {
                 $success = 'Plugin activated successfully!';
@@ -81,10 +99,20 @@ $active_plugins = [];
 try {
     if (class_exists('PluginLoader')) {
         // Force re-initialize to ensure all plugins are detected
-        PluginLoader::init(true); // Force reload
+        try {
+            PluginLoader::init(true); // Force reload
+        } catch (Exception $e) {
+            error_log("Error initializing PluginLoader: " . $e->getMessage());
+        }
         
-        $all_plugins = PluginLoader::getPlugins();
-        $active_plugins = PluginLoader::getActivePlugins();
+        try {
+            $all_plugins = PluginLoader::getPlugins();
+            $active_plugins = PluginLoader::getActivePlugins();
+        } catch (Exception $e) {
+            error_log("Error getting plugins from PluginLoader: " . $e->getMessage());
+            $all_plugins = [];
+            $active_plugins = [];
+        }
         
         // Also check database for plugins that might not be detected by file scan
         try {
@@ -120,7 +148,7 @@ try {
                                 $absolute_path = $plugin_file;
                             }
                             
-                            if ($absolute_path && file_exists($absolute_path)) {
+                            if ($absolute_path && file_exists($absolute_path) && class_exists('PluginLoader')) {
                                 try {
                                     // Get plugin data using PluginLoader method
                                     $plugin_data = PluginLoader::getPluginData($absolute_path);
@@ -176,6 +204,13 @@ include 'includes/header.php';
     <h1><i class="fas fa-puzzle-piece"></i> Plugin Management</h1>
     <p>Manage and activate third-party plugins to extend your music platform functionality.</p>
 </div>
+
+<?php if ($plugin_system_error): ?>
+<div class="alert alert-danger">
+    <i class="fas fa-exclamation-triangle"></i> <strong>Plugin System Error:</strong> <?php echo htmlspecialchars($plugin_system_error); ?>
+    <br><small>Some features may not be available. Please check your error logs for more details.</small>
+</div>
+<?php endif; ?>
 
 <?php if ($success): ?>
 <div class="alert alert-success">

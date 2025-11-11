@@ -7,7 +7,8 @@
 require_once 'auth-check.php';
 require_once __DIR__ . '/../config/database.php';
 
-// Load plugin system
+// Load plugin system with comprehensive error handling
+$plugin_system_error = '';
 try {
     if (file_exists(__DIR__ . '/../includes/plugin-loader.php')) {
         require_once __DIR__ . '/../includes/plugin-loader.php';
@@ -23,11 +24,26 @@ try {
     
     // Initialize plugin system
     if (class_exists('PluginLoader')) {
-        PluginLoader::init();
+        try {
+            PluginLoader::init();
+        } catch (Exception $e) {
+            error_log("PluginLoader::init() error: " . $e->getMessage());
+            $plugin_system_error = 'Plugin system initialization failed: ' . $e->getMessage();
+        } catch (Error $e) {
+            error_log("PluginLoader::init() fatal error: " . $e->getMessage());
+            $plugin_system_error = 'Plugin system initialization failed. Please check error logs.';
+        }
+    } else {
+        $plugin_system_error = 'PluginLoader class not found after loading plugin system files.';
     }
 } catch (Exception $e) {
     error_log("Plugin system error: " . $e->getMessage());
-    die("Plugin system error: " . $e->getMessage());
+    error_log("Stack trace: " . $e->getTraceAsString());
+    $plugin_system_error = 'Plugin system error: ' . $e->getMessage();
+} catch (Error $e) {
+    error_log("Plugin system fatal error: " . $e->getMessage());
+    error_log("File: " . $e->getFile() . " Line: " . $e->getLine());
+    $plugin_system_error = 'Plugin system fatal error. Please check error logs.';
 }
 
 $page_title = 'Plugin Store';
@@ -229,7 +245,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                 }
             }
             
-            if (file_exists($plugin_file) && class_exists('PluginLoader')) {
+            if (file_exists($plugin_file)) {
+                if (!class_exists('PluginLoader')) {
+                    throw new Exception('Plugin system not loaded. Cannot activate plugin.');
+                }
+                
                 // Normalize plugin file path (use relative path from plugins directory)
                 $plugins_base = realpath(__DIR__ . '/../plugins/');
                 $plugin_file_normalized = $plugin_file;
@@ -244,7 +264,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                 // Activate the plugin (this saves it to database)
                 if (PluginLoader::activatePlugin($plugin_file_normalized)) {
                     // Force reload plugins to detect the newly installed one
-                    PluginLoader::init(true); // Force reload
+                    try {
+                        PluginLoader::init(true); // Force reload
+                    } catch (Exception $e) {
+                        error_log("Error reloading plugins after installation: " . $e->getMessage());
+                        // Continue anyway, plugin is already activated
+                    }
                     $success = 'Plugin "' . htmlspecialchars($plugin_name) . '" installed and activated successfully!';
                 } else {
                     throw new Exception('Failed to activate plugin. Please try activating it manually from the Plugins page.');
@@ -321,10 +346,20 @@ try {
     // Then, get plugins from PluginLoader
     if (class_exists('PluginLoader')) {
         // Force re-initialize to ensure plugins are loaded (especially after installation)
-        PluginLoader::init(true); // Force reload
+        try {
+            PluginLoader::init(true); // Force reload
+        } catch (Exception $e) {
+            error_log("Error initializing PluginLoader: " . $e->getMessage());
+        }
         
-        $all_plugins = PluginLoader::getPlugins();
-        $active_plugins = PluginLoader::getActivePlugins();
+        try {
+            $all_plugins = PluginLoader::getPlugins();
+            $active_plugins = PluginLoader::getActivePlugins();
+        } catch (Exception $e) {
+            error_log("Error getting plugins from PluginLoader: " . $e->getMessage());
+            $all_plugins = [];
+            $active_plugins = [];
+        }
         
         foreach ($all_plugins as $plugin_slug => $plugin) {
             // Normalize plugin file path for comparison
@@ -381,6 +416,13 @@ include 'includes/header.php';
 <?php if ($success): ?>
 <div class="alert alert-success">
     <i class="fas fa-check-circle"></i> <?php echo htmlspecialchars($success); ?>
+</div>
+<?php endif; ?>
+
+<?php if ($plugin_system_error): ?>
+<div class="alert alert-danger">
+    <i class="fas fa-exclamation-triangle"></i> <strong>Plugin System Error:</strong> <?php echo htmlspecialchars($plugin_system_error); ?>
+    <br><small>Some features may not be available. Please check your error logs for more details.</small>
 </div>
 <?php endif; ?>
 
