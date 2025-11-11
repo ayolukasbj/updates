@@ -249,11 +249,117 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
             $download_url .= '&license_key=' . urlencode($license_key);
         }
         
-        $plugin_zip = file_get_contents($download_url);
+        error_log("Plugin installation: Attempting to download from: {$download_url}");
         
-        if ($plugin_zip === false) {
-            throw new Exception('Failed to download plugin from license server');
+        // Use cURL for better error handling
+        $plugin_zip = false;
+        $download_error = '';
+        $http_code = 0;
+        
+        if (function_exists('curl_init')) {
+            $ch = curl_init($download_url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 60); // 60 second timeout
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10); // 10 second connection timeout
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Allow self-signed certificates
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Music Platform Plugin Installer/1.0');
+            
+            $plugin_zip = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curl_error = curl_error($ch);
+            curl_close($ch);
+            
+            if ($curl_error) {
+                $download_error = "cURL error: {$curl_error}";
+                error_log("Plugin installation: cURL error - {$curl_error}");
+            } elseif ($http_code !== 200) {
+                $download_error = "HTTP error: {$http_code}";
+                error_log("Plugin installation: HTTP error - {$http_code}");
+                // Try to parse error message from response
+                if ($plugin_zip) {
+                    $error_data = json_decode($plugin_zip, true);
+                    if ($error_data && isset($error_data['error'])) {
+                        $download_error .= " - " . $error_data['error'];
+                    } else {
+                        // Show first 200 characters of response
+                        $preview = substr($plugin_zip, 0, 200);
+                        $download_error .= " - Response: " . htmlspecialchars($preview);
+                    }
+                }
+            }
+        } else {
+            // Fallback to file_get_contents if cURL is not available
+            $context = stream_context_create([
+                'http' => [
+                    'timeout' => 60,
+                    'follow_location' => true,
+                    'user_agent' => 'Music Platform Plugin Installer/1.0',
+                    'ignore_errors' => true
+                ],
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false
+                ]
+            ]);
+            
+            $plugin_zip = @file_get_contents($download_url, false, $context);
+            
+            if ($plugin_zip === false) {
+                $last_error = error_get_last();
+                $download_error = "file_get_contents failed";
+                if ($last_error && strpos($last_error['message'], 'file_get_contents') !== false) {
+                    $download_error .= ": " . $last_error['message'];
+                }
+                error_log("Plugin installation: file_get_contents failed - " . ($last_error['message'] ?? 'Unknown error'));
+            } else {
+                // Check HTTP response code from headers
+                if (isset($http_response_header)) {
+                    foreach ($http_response_header as $header) {
+                        if (preg_match('/HTTP\/\d\.\d\s+(\d+)/', $header, $matches)) {
+                            $http_code = (int)$matches[1];
+                            if ($http_code !== 200) {
+                                $download_error = "HTTP error: {$http_code}";
+                                error_log("Plugin installation: HTTP error from file_get_contents - {$http_code}");
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
         }
+        
+        // Validate that we got a ZIP file
+        if ($plugin_zip === false || !empty($download_error)) {
+            $error_msg = 'Failed to download plugin from license server.';
+            if (!empty($download_error)) {
+                $error_msg .= ' ' . $download_error;
+            }
+            if ($http_code > 0) {
+                $error_msg .= " (HTTP {$http_code})";
+            }
+            $error_msg .= " URL: {$download_url}";
+            throw new Exception($error_msg);
+        }
+        
+        // Check if response is actually a ZIP file (starts with PK header)
+        if (substr($plugin_zip, 0, 2) !== 'PK') {
+            // Might be a JSON error response
+            $error_data = json_decode($plugin_zip, true);
+            if ($error_data && isset($error_data['error'])) {
+                throw new Exception('License server error: ' . $error_data['error']);
+            } elseif ($error_data && isset($error_data['message'])) {
+                throw new Exception('License server error: ' . $error_data['message']);
+            } else {
+                // Show first 500 characters for debugging
+                $preview = substr($plugin_zip, 0, 500);
+                error_log("Plugin installation: Response is not a ZIP file. Preview: " . $preview);
+                throw new Exception('Downloaded file is not a valid ZIP file. Server may have returned an error. Check error logs for details.');
+            }
+        }
+        
+        error_log("Plugin installation: Successfully downloaded plugin ZIP file (" . strlen($plugin_zip) . " bytes)");
         
         // Save to temp file
         $temp_file = sys_get_temp_dir() . '/' . $plugin_slug . '_' . time() . '.zip';
