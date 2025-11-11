@@ -188,7 +188,7 @@ try {
 }
 
 try {
-    $recent_songs = getRecentSongs(8);
+    $recent_songs = getRecentSongs(6);
     error_log("index.php: getRecentSongs returned " . count($recent_songs) . " songs");
     if (empty($recent_songs)) {
         error_log("index.php: WARNING - getRecentSongs returned empty array");
@@ -570,7 +570,7 @@ try {
         if ($conn) {
             $checkSongs = $conn->query("SHOW TABLES LIKE 'songs'");
             if ($checkSongs->rowCount() > 0) {
-                // Today - Most played songs today (by upload date)
+                // Today - Most downloaded songs today (by download activity today)
                 try {
                     $popularTodayStmt = $conn->query("
                         SELECT s.*, 
@@ -583,7 +583,7 @@ try {
                         FROM songs s
                         LEFT JOIN users u ON s.uploaded_by = u.id
                         WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-                        AND DATE(COALESCE(s.upload_date, s.created_at, s.uploaded_at)) = CURDATE()
+                        AND s.downloads > 0
                         ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
                         LIMIT 5
                     ");
@@ -593,7 +593,7 @@ try {
                     $popular_today = [];
                 }
                 
-                // This Week - Most played songs this week
+                // This Week - Most downloaded songs this week
                 try {
                     $popularWeekStmt = $conn->query("
                         SELECT s.*, 
@@ -606,7 +606,7 @@ try {
                         FROM songs s
                         LEFT JOIN users u ON s.uploaded_by = u.id
                         WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-                        AND COALESCE(s.upload_date, s.created_at, s.uploaded_at) >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                        AND s.downloads > 0
                         ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
                         LIMIT 5
                     ");
@@ -616,7 +616,7 @@ try {
                     $popular_week = [];
                 }
                 
-                // This Month - Most played songs this month
+                // This Month - Most downloaded songs this month
                 try {
                     $popularMonthStmt = $conn->query("
                         SELECT s.*, 
@@ -629,7 +629,7 @@ try {
                         FROM songs s
                         LEFT JOIN users u ON s.uploaded_by = u.id
                         WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-                        AND COALESCE(s.upload_date, s.created_at, s.uploaded_at) >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+                        AND s.downloads > 0
                         ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
                         LIMIT 5
                     ");
@@ -1495,10 +1495,10 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
             }
         }
         
-        /* Songs Recently Added Grid - Desktop: 4 columns */
+        /* Songs Recently Added Grid - Desktop: 3 columns for 6 items */
         .songs-recently-added-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 20px;
         }
         
@@ -2316,202 +2316,17 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                 
                 <!-- Right: Most Popular Sidebar -->
                 <div>
-                    <h2 style="font-size: 20px; font-weight: 700; color: #2c3e50; margin-bottom: 15px;">Most Popular</h2>
-                    <div style="background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); overflow: hidden;">
-                        <!-- Tabs -->
-                        <div style="display: flex; border-bottom: 2px solid #e0e0e0;">
-                            <button class="popular-tab-btn active" data-tab="today" style="flex: 1; padding: 12px; background: #e91e63; color: white; border: none; font-weight: 600; font-size: 12px; cursor: pointer; text-transform: uppercase;">
-                                Today
-                            </button>
-                            <button class="popular-tab-btn" data-tab="week" style="flex: 1; padding: 12px; background: #f5f5f5; color: #666; border: none; font-weight: 600; font-size: 12px; cursor: pointer; text-transform: uppercase;">
-                                This Week
-                            </button>
-                            <button class="popular-tab-btn" data-tab="month" style="flex: 1; padding: 12px; background: #f5f5f5; color: #666; border: none; font-weight: 600; font-size: 12px; cursor: pointer; text-transform: uppercase;">
-                                This Month
-                            </button>
-                        </div>
-                        
-                        <!-- Tab Content -->
-                        <div id="popular-tab-content" style="padding: 15px;">
-                            <?php 
-                            // Default to today
-                            $current_popular = !empty($popular_today) ? $popular_today : (!empty($popular_week) ? $popular_week : $popular_month);
-                            ?>
-                            <div class="popular-content" data-content="today" style="display: block;">
-                                <?php if (!empty($popular_today)): ?>
-                                    <?php foreach ($popular_today as $index => $pop): 
-                                        // Generate song slug
-                                        $songTitleSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $pop['title'] ?? ''));
-                                        $songTitleSlug = preg_replace('/\s+/', '-', trim($songTitleSlug));
-                                        $songArtistForSlug = $pop['artist'] ?? 'unknown-artist';
-                                        $songArtistSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $songArtistForSlug));
-                                        $songArtistSlug = preg_replace('/\s+/', '-', trim($songArtistSlug));
-                                        $songSlug = $songTitleSlug . '-by-' . $songArtistSlug;
-                                        $songUrl = base_url('song/' . $songSlug);
-                                    ?>
-                                    <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: <?php echo $index < count($popular_today) - 1 ? '1px solid #e0e0e0' : 'none'; ?>;">
-                                        <a href="<?php echo $songUrl; ?>" style="text-decoration: none; color: inherit; display: block;">
-                                            <div style="height: 120px; overflow: hidden; border-radius: 6px; margin-bottom: 10px;">
-                                                <?php if (!empty($pop['cover_art'])): ?>
-                                                <img src="<?php echo htmlspecialchars($pop['cover_art']); ?>" alt="<?php echo htmlspecialchars($pop['title'] ?? 'Song'); ?>" style="width: 100%; height: 100%; object-fit: cover;">
-                                                <?php else: ?>
-                                                <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-size: 24px;">
-                                                    <i class="fas fa-music"></i>
-                                                </div>
-                                                <?php endif; ?>
-                                            </div>
-                                            <h3 style="font-size: 14px; font-weight: 700; color: #2c3e50; margin: 0 0 5px; line-height: 1.4;">
-                                                <?php echo htmlspecialchars($pop['title'] ?? 'Unknown Title'); ?>
-                                            </h3>
-                                            <p style="font-size: 12px; color: #666; margin: 0 0 5px;">
-                                                <?php echo htmlspecialchars($pop['artist'] ?? 'Unknown Artist'); ?>
-                                            </p>
-                                            <p style="font-size: 11px; color: #999; margin: 0;">
-                                                <i class="fas fa-play"></i> <?php echo number_format($pop['plays'] ?? 0); ?> • 
-                                                <i class="fas fa-download"></i> <?php echo number_format($pop['downloads'] ?? 0); ?>
-                                            </p>
-                                        </a>
-                                    </div>
-                                    <?php endforeach; ?>
-                                <?php else: ?>
-                                    <div style="color: #999; font-size: 14px; text-align: center; padding: 20px;">No popular songs today</div>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <div class="popular-content" data-content="week" style="display: none;">
-                                <?php if (!empty($popular_week)): ?>
-                                    <?php foreach ($popular_week as $index => $pop): 
-                                        // Generate song slug
-                                        $songTitleSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $pop['title'] ?? ''));
-                                        $songTitleSlug = preg_replace('/\s+/', '-', trim($songTitleSlug));
-                                        $songArtistForSlug = $pop['artist'] ?? 'unknown-artist';
-                                        $songArtistSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $songArtistForSlug));
-                                        $songArtistSlug = preg_replace('/\s+/', '-', trim($songArtistSlug));
-                                        $songSlug = $songTitleSlug . '-by-' . $songArtistSlug;
-                                        $songUrl = base_url('song/' . $songSlug);
-                                    ?>
-                                    <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: <?php echo $index < count($popular_week) - 1 ? '1px solid #e0e0e0' : 'none'; ?>;">
-                                        <a href="<?php echo $songUrl; ?>" style="text-decoration: none; color: inherit; display: block;">
-                                            <div style="height: 120px; overflow: hidden; border-radius: 6px; margin-bottom: 10px;">
-                                                <?php if (!empty($pop['cover_art'])): ?>
-                                                <img src="<?php echo htmlspecialchars($pop['cover_art']); ?>" alt="<?php echo htmlspecialchars($pop['title'] ?? 'Song'); ?>" style="width: 100%; height: 100%; object-fit: cover;">
-                                                <?php else: ?>
-                                                <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-size: 24px;">
-                                                    <i class="fas fa-music"></i>
-                                                </div>
-                                                <?php endif; ?>
-                                            </div>
-                                            <h3 style="font-size: 14px; font-weight: 700; color: #2c3e50; margin: 0 0 5px; line-height: 1.4;">
-                                                <?php echo htmlspecialchars($pop['title'] ?? 'Unknown Title'); ?>
-                                            </h3>
-                                            <p style="font-size: 12px; color: #666; margin: 0 0 5px;">
-                                                <?php echo htmlspecialchars($pop['artist'] ?? 'Unknown Artist'); ?>
-                                            </p>
-                                            <p style="font-size: 11px; color: #999; margin: 0;">
-                                                <i class="fas fa-play"></i> <?php echo number_format($pop['plays'] ?? 0); ?> • 
-                                                <i class="fas fa-download"></i> <?php echo number_format($pop['downloads'] ?? 0); ?>
-                                            </p>
-                                        </a>
-                                    </div>
-                                    <?php endforeach; ?>
-                                <?php else: ?>
-                                    <div style="color: #999; font-size: 14px; text-align: center; padding: 20px;">No popular songs this week</div>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <div class="popular-content" data-content="month" style="display: none;">
-                                <?php if (!empty($popular_month)): ?>
-                                    <?php foreach ($popular_month as $index => $pop): 
-                                        // Generate song slug
-                                        $songTitleSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $pop['title'] ?? ''));
-                                        $songTitleSlug = preg_replace('/\s+/', '-', trim($songTitleSlug));
-                                        $songArtistForSlug = $pop['artist'] ?? 'unknown-artist';
-                                        $songArtistSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $songArtistForSlug));
-                                        $songArtistSlug = preg_replace('/\s+/', '-', trim($songArtistSlug));
-                                        $songSlug = $songTitleSlug . '-by-' . $songArtistSlug;
-                                        $songUrl = base_url('song/' . $songSlug);
-                                    ?>
-                                    <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: <?php echo $index < count($popular_month) - 1 ? '1px solid #e0e0e0' : 'none'; ?>;">
-                                        <a href="<?php echo $songUrl; ?>" style="text-decoration: none; color: inherit; display: block;">
-                                            <div style="height: 120px; overflow: hidden; border-radius: 6px; margin-bottom: 10px;">
-                                                <?php if (!empty($pop['cover_art'])): ?>
-                                                <img src="<?php echo htmlspecialchars($pop['cover_art']); ?>" alt="<?php echo htmlspecialchars($pop['title'] ?? 'Song'); ?>" style="width: 100%; height: 100%; object-fit: cover;">
-                                                <?php else: ?>
-                                                <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-size: 24px;">
-                                                    <i class="fas fa-music"></i>
-                                                </div>
-                                                <?php endif; ?>
-                                            </div>
-                                            <h3 style="font-size: 14px; font-weight: 700; color: #2c3e50; margin: 0 0 5px; line-height: 1.4;">
-                                                <?php echo htmlspecialchars($pop['title'] ?? 'Unknown Title'); ?>
-                                            </h3>
-                                            <p style="font-size: 12px; color: #666; margin: 0 0 5px;">
-                                                <?php echo htmlspecialchars($pop['artist'] ?? 'Unknown Artist'); ?>
-                                            </p>
-                                            <p style="font-size: 11px; color: #999; margin: 0;">
-                                                <i class="fas fa-play"></i> <?php echo number_format($pop['plays'] ?? 0); ?> • 
-                                                <i class="fas fa-download"></i> <?php echo number_format($pop['downloads'] ?? 0); ?>
-                                            </p>
-                                        </a>
-                                    </div>
-                                    <?php endforeach; ?>
-                                <?php else: ?>
-                                    <div style="color: #999; font-size: 14px; text-align: center; padding: 20px;">No popular songs this month</div>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <style>
-            @media (max-width: 968px) {
-                .recent-news-wrapper > div {
-                    grid-template-columns: 1fr !important;
-                    gap: 20px !important;
-                }
-                .recent-news-item > a > div {
-                    grid-template-columns: 1fr !important;
-                }
-                .recent-news-item > a > div > div:first-child {
-                    height: 200px !important;
-                    width: 100% !important;
-                }
-            }
-        </style>
-        
-        <script>
-        // Popular tabs functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            const tabButtons = document.querySelectorAll('.popular-tab-btn');
-            const tabContents = document.querySelectorAll('.popular-content');
-            
-            tabButtons.forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const tab = this.getAttribute('data-tab');
-                    
-                    // Update button styles
-                    tabButtons.forEach(b => {
-                        b.style.background = '#f5f5f5';
-                        b.style.color = '#666';
-                    });
-                    this.style.background = '#e91e63';
-                    this.style.color = 'white';
-                    
-                    // Update content
-                    tabContents.forEach(content => {
-                        content.style.display = 'none';
-                    });
-                    const activeContent = document.querySelector(`.popular-content[data-content="${tab}"]`);
-                    if (activeContent) {
-                        activeContent.style.display = 'block';
+                    <?php 
+                    // Include Most Popular section
+                    $most_popular_file = __DIR__ . '/includes/sections/most-popular-songs.php';
+                    if (file_exists($most_popular_file)) {
+                        include $most_popular_file;
+                    } else {
+                        // Fallback - show message if file not found
+                        echo '<div style="padding: 20px; text-align: center; color: #999;">Most Popular section file not found</div>';
                     }
-                });
-            });
-        });
-        </script>
-        <?php endif; ?>
+                    ?>
+                </div>
 
         <!-- ============================================
             HOME PAGE LAYOUT - REORGANIZED SECTIONS
@@ -2529,78 +2344,19 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
         ============================================== -->
 
         <!-- 1. Recently Uploaded Songs -->
-        <div style="margin: 40px 0;">
-        <?php if (!empty($recent_songs)): ?>
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-                <h2 style="font-size: 24px; font-weight: 700; color: #2c3e50; margin: 0; padding-bottom: 10px; border-bottom: 3px solid #2196F3;">Recently Uploaded Songs</h2>
-                <a href="songs.php" style="background: #2196F3; color: white; padding: 8px 20px; border-radius: 20px; text-decoration: none; font-weight: 600; font-size: 13px; transition: all 0.3s;" onmouseover="this.style.background='#1976D2';" onmouseout="this.style.background='#2196F3';">
-                    View All
-                </a>
-            </div>
-            <div class="songs-recently-added-grid music-grid">
-                <?php foreach ($recent_songs as $song): 
-                    // Generate song slug
-                    $titleSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $song['title'] ?? ''));
-                    $titleSlug = preg_replace('/\s+/', '-', trim($titleSlug));
-                    $artistForSlug = $song['artist'] ?? 'unknown-artist';
-                    if (!empty($song['uploaded_by'])) {
-                        try {
-                            $slugUploaderStmt = $conn->prepare("SELECT username FROM users WHERE id = ?");
-                            $slugUploaderStmt->execute([$song['uploaded_by']]);
-                            $slugUploader = $slugUploaderStmt->fetch(PDO::FETCH_ASSOC);
-                            if ($slugUploader && !empty($slugUploader['username'])) {
-                                $artistForSlug = $slugUploader['username'];
-                            }
-                        } catch (Exception $e) {
-                            // Keep default
-                        }
-                    }
-                    $artistSlug = strtolower(preg_replace('/[^a-z0-9\s]+/i', '', $artistForSlug));
-                    $artistSlug = preg_replace('/\s+/', '-', trim($artistSlug));
-                    $songSlug = $titleSlug . '-by-' . $artistSlug;
-                    $songUrl = base_url('song/' . $songSlug);
-                ?>
-                <a href="<?php echo $songUrl; ?>" style="text-decoration: none; color: inherit; display: block;">
-                <div class="music-card">
-                    <div class="music-cover">
-                        <?php if (!empty($song['cover_art'])): ?>
-                        <img src="<?php echo htmlspecialchars($song['cover_art']); ?>" alt="<?php echo htmlspecialchars($song['title'] ?? 'Song'); ?>">
-                        <?php else: ?>
-                        <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-size: 48px;">
-                            <i class="fas fa-music"></i>
-                        </div>
-                        <?php endif; ?>
-                        <div class="music-play-overlay">
-                            <button class="play-button" type="button" onclick="event.preventDefault(); event.stopPropagation(); playSong(<?php echo $song['id']; ?>);">
-                                <i class="fas fa-play"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="music-info">
-                        <div class="music-title"><?php echo htmlspecialchars($song['title'] ?? 'Unknown Title'); ?></div>
-                        <div class="music-artist"><?php echo htmlspecialchars($song['artist'] ?? 'Unknown Artist'); ?></div>
-                        <div class="music-stats">
-                            <span><i class="fas fa-play" style="margin-right: 5px;"></i><?php echo number_format($song['plays'] ?? 0); ?></span>
-                            <span><i class="fas fa-download" style="margin-right: 5px;"></i><?php echo number_format($song['downloads'] ?? 0); ?></span>
-                        </div>
-                    </div>
-                </div>
-                </a>
-                <?php endforeach; ?>
-            </div>
-        <?php else: ?>
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-                <h2 style="font-size: 24px; font-weight: 700; color: #2c3e50; margin: 0; padding-bottom: 10px; border-bottom: 3px solid #2196F3;">Recently Uploaded Songs</h2>
-                <a href="songs.php" style="background: #2196F3; color: white; padding: 8px 20px; border-radius: 20px; text-decoration: none; font-weight: 600; font-size: 13px; transition: all 0.3s;" onmouseover="this.style.background='#1976D2';" onmouseout="this.style.background='#2196F3';">
-                    View All
-                </a>
-            </div>
-            <div style="text-align: center; padding: 40px; background: white; border-radius: 8px; color: #666;">
-                <i class="fas fa-music" style="font-size: 48px; color: #ddd; margin-bottom: 15px;"></i>
-                <p style="font-size: 16px; margin: 0;">No recently uploaded songs yet.</p>
-            </div>
-        <?php endif; ?>
-        </div>
+        <?php 
+        // Include Recently Uploaded Songs section
+        $recent_songs_file = __DIR__ . '/includes/sections/recently-uploaded-songs.php';
+        if (file_exists($recent_songs_file)) {
+            include $recent_songs_file;
+        } else {
+            // Fallback - show message if file not found
+            echo '<div style="margin: 40px 0;">';
+            echo '<h2 style="font-size: 24px; font-weight: 700; color: #2c3e50; margin: 0; padding-bottom: 10px; border-bottom: 3px solid #2196F3;">Recently Uploaded Songs</h2>';
+            echo '<div style="text-align: center; padding: 40px; background: white; border-radius: 8px; color: #666;">Section file not found.</div>';
+            echo '</div>';
+        }
+        ?>
 
         <!-- 2. Political News -->
         <?php 

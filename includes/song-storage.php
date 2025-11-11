@@ -277,7 +277,8 @@ function getRecentSongs($limit = 6) {
             return [];
         }
         
-        // Get recent songs directly from database, ordered by upload date
+        // Get recent songs directly from database, ordered by publish/upload date
+        // Show latest published songs (by upload_date, created_at, or uploaded_at)
         $stmt = $conn->prepare("
             SELECT s.*, 
                    s.uploaded_by,
@@ -289,6 +290,8 @@ function getRecentSongs($limit = 6) {
             FROM songs s
             LEFT JOIN users u ON s.uploaded_by = u.id
             WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
+            AND s.file_path IS NOT NULL 
+            AND s.file_path != ''
             ORDER BY COALESCE(s.upload_date, s.created_at, s.uploaded_at) DESC, s.id DESC
             LIMIT ?
         ");
