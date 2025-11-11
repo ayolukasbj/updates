@@ -2322,8 +2322,24 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                             <div style="margin-bottom: 20px; padding-bottom: 20px; border-bottom: <?php echo $index < count($sidebar_recent_songs) - 1 ? '1px solid #e0e0e0' : 'none'; ?>;">
                                 <a href="<?php echo $songUrl; ?>" style="text-decoration: none; color: inherit; display: block;">
                                     <div style="height: 120px; overflow: hidden; border-radius: 6px; margin-bottom: 10px;">
-                                        <?php if (!empty($song['cover_art'])): ?>
-                                        <img src="<?php echo htmlspecialchars($song['cover_art']); ?>" alt="<?php echo htmlspecialchars($song['title'] ?? 'Song'); ?>" style="width: 100%; height: 100%; object-fit: cover;">
+                                        <?php 
+                                        // Get artist avatar as cover art
+                                        $song_cover_art = $song['cover_art'] ?? '';
+                                        if (empty($song_cover_art) && !empty($song['uploaded_by']) && $conn) {
+                                            try {
+                                                $avatarStmt = $conn->prepare("SELECT avatar FROM users WHERE id = ?");
+                                                $avatarStmt->execute([$song['uploaded_by']]);
+                                                $avatarData = $avatarStmt->fetch(PDO::FETCH_ASSOC);
+                                                if ($avatarData && !empty($avatarData['avatar'])) {
+                                                    $song_cover_art = $avatarData['avatar'];
+                                                }
+                                            } catch (Exception $e) {
+                                                error_log("Error fetching artist avatar for song: " . $e->getMessage());
+                                            }
+                                        }
+                                        ?>
+                                        <?php if (!empty($song_cover_art)): ?>
+                                        <img src="<?php echo htmlspecialchars($song_cover_art); ?>" alt="<?php echo htmlspecialchars($song['title'] ?? 'Song'); ?>" style="width: 100%; height: 100%; object-fit: cover;">
                                         <?php else: ?>
                                         <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-size: 24px;">
                                             <i class="fas fa-music"></i>
@@ -2632,8 +2648,24 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                     
                     <!-- Album Art -->
                     <a href="/song/<?php echo urlencode($chartSongSlug); ?>" style="text-decoration: none; flex-shrink: 0;">
-                        <?php if (!empty($chartSong['cover_art'])): ?>
-                        <img src="<?php echo htmlspecialchars($chartSong['cover_art']); ?>" alt="<?php echo htmlspecialchars($chartSong['title']); ?>" class="chart-cover" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover; background: #f0f0f0;">
+                        <?php 
+                        // Get artist avatar as cover art
+                        $chart_cover_art = $chartSong['cover_art'] ?? '';
+                        if (empty($chart_cover_art) && !empty($chartSong['uploaded_by']) && $conn) {
+                            try {
+                                $avatarStmt = $conn->prepare("SELECT avatar FROM users WHERE id = ?");
+                                $avatarStmt->execute([$chartSong['uploaded_by']]);
+                                $avatarData = $avatarStmt->fetch(PDO::FETCH_ASSOC);
+                                if ($avatarData && !empty($avatarData['avatar'])) {
+                                    $chart_cover_art = $avatarData['avatar'];
+                                }
+                            } catch (Exception $e) {
+                                error_log("Error fetching artist avatar for chart song: " . $e->getMessage());
+                            }
+                        }
+                        ?>
+                        <?php if (!empty($chart_cover_art)): ?>
+                        <img src="<?php echo htmlspecialchars($chart_cover_art); ?>" alt="<?php echo htmlspecialchars($chartSong['title']); ?>" class="chart-cover" style="width: 60px; height: 60px; border-radius: 6px; object-fit: cover; background: #f0f0f0;">
                         <?php else: ?>
                         <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #667eea, #764ba2); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-size: 20px;">
                             <i class="fas fa-music"></i>
@@ -2773,8 +2805,24 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                         ?>
                         <a href="<?php echo $songUrl; ?>" style="display: flex; gap: 12px; padding: 12px; border-bottom: <?php echo $index < count($most_played_songs) - 1 ? '1px solid #f0f0f0' : 'none'; ?>; text-decoration: none; color: inherit; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa';" onmouseout="this.style.background='transparent';">
                             <div style="width: 50px; height: 50px; flex-shrink: 0; border-radius: 4px; overflow: hidden;">
-                                <?php if (!empty($song['cover_art'])): ?>
-                                <img src="<?php echo htmlspecialchars($song['cover_art']); ?>" alt="<?php echo htmlspecialchars($song['title'] ?? 'Song'); ?>" style="width: 100%; height: 100%; object-fit: cover;">
+                                <?php 
+                                // Get artist avatar as cover art
+                                $song_cover_art = $song['cover_art'] ?? '';
+                                if (empty($song_cover_art) && !empty($song['uploaded_by']) && $conn) {
+                                    try {
+                                        $avatarStmt = $conn->prepare("SELECT avatar FROM users WHERE id = ?");
+                                        $avatarStmt->execute([$song['uploaded_by']]);
+                                        $avatarData = $avatarStmt->fetch(PDO::FETCH_ASSOC);
+                                        if ($avatarData && !empty($avatarData['avatar'])) {
+                                            $song_cover_art = $avatarData['avatar'];
+                                        }
+                                    } catch (Exception $e) {
+                                        error_log("Error fetching artist avatar for song: " . $e->getMessage());
+                                    }
+                                }
+                                ?>
+                                <?php if (!empty($song_cover_art)): ?>
+                                <img src="<?php echo htmlspecialchars($song_cover_art); ?>" alt="<?php echo htmlspecialchars($song['title'] ?? 'Song'); ?>" style="width: 100%; height: 100%; object-fit: cover;">
                                 <?php else: ?>
                                 <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-size: 16px;">
                                     <i class="fas fa-music"></i>
@@ -2861,8 +2909,24 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                         ?>
                         <a href="<?php echo $newSongUrl; ?>" style="display: flex; gap: 12px; padding: 12px; border-bottom: <?php echo $index < min(4, count($featured_songs) - 1) ? '1px solid #f0f0f0' : 'none'; ?>; text-decoration: none; color: inherit; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa';" onmouseout="this.style.background='transparent';">
                             <div style="width: 50px; height: 50px; flex-shrink: 0; border-radius: 4px; overflow: hidden;">
-                                <?php if (!empty($newSong['cover_art'])): ?>
-                                <img src="<?php echo htmlspecialchars($newSong['cover_art']); ?>" alt="<?php echo htmlspecialchars($newSong['title'] ?? 'Song'); ?>" style="width: 100%; height: 100%; object-fit: cover;">
+                                <?php 
+                                // Get artist avatar as cover art
+                                $song_cover_art = $newSong['cover_art'] ?? '';
+                                if (empty($song_cover_art) && !empty($newSong['uploaded_by']) && $conn) {
+                                    try {
+                                        $avatarStmt = $conn->prepare("SELECT avatar FROM users WHERE id = ?");
+                                        $avatarStmt->execute([$newSong['uploaded_by']]);
+                                        $avatarData = $avatarStmt->fetch(PDO::FETCH_ASSOC);
+                                        if ($avatarData && !empty($avatarData['avatar'])) {
+                                            $song_cover_art = $avatarData['avatar'];
+                                        }
+                                    } catch (Exception $e) {
+                                        error_log("Error fetching artist avatar for song: " . $e->getMessage());
+                                    }
+                                }
+                                ?>
+                                <?php if (!empty($song_cover_art)): ?>
+                                <img src="<?php echo htmlspecialchars($song_cover_art); ?>" alt="<?php echo htmlspecialchars($newSong['title'] ?? 'Song'); ?>" style="width: 100%; height: 100%; object-fit: cover;">
                                 <?php else: ?>
                                 <div style="width: 100%; height: 100%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-size: 16px;">
                                     <i class="fas fa-music"></i>
@@ -2955,8 +3019,24 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                     </div>
                     <?php endif; ?>
                     <div style="height: 200px; overflow: hidden; background: linear-gradient(135deg, #667eea, #764ba2);">
-                        <?php if (!empty($song['cover_art'])): ?>
-                        <img src="<?php echo htmlspecialchars($song['cover_art']); ?>" alt="<?php echo htmlspecialchars($song['title']); ?>" style="width: 100%; height: 100%; object-fit: cover;">
+                        <?php 
+                        // Get artist avatar as cover art
+                        $song_cover_art = $song['cover_art'] ?? '';
+                        if (empty($song_cover_art) && !empty($song['uploaded_by']) && $conn) {
+                            try {
+                                $avatarStmt = $conn->prepare("SELECT avatar FROM users WHERE id = ?");
+                                $avatarStmt->execute([$song['uploaded_by']]);
+                                $avatarData = $avatarStmt->fetch(PDO::FETCH_ASSOC);
+                                if ($avatarData && !empty($avatarData['avatar'])) {
+                                    $song_cover_art = $avatarData['avatar'];
+                                }
+                            } catch (Exception $e) {
+                                error_log("Error fetching artist avatar for song: " . $e->getMessage());
+                            }
+                        }
+                        ?>
+                        <?php if (!empty($song_cover_art)): ?>
+                        <img src="<?php echo htmlspecialchars($song_cover_art); ?>" alt="<?php echo htmlspecialchars($song['title']); ?>" style="width: 100%; height: 100%; object-fit: cover;">
                         <?php else: ?>
                         <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-size: 48px;">
                             <i class="fas fa-music"></i>
@@ -3034,8 +3114,24 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                     
                     <!-- Avatar -->
                     <div style="position: relative; width: 100%; padding-top: 100%; background: linear-gradient(135deg, #667eea, #764ba2); overflow: hidden;">
-                        <?php if (!empty($artist['avatar'])): ?>
-                        <img src="<?php echo htmlspecialchars($artist['avatar']); ?>" alt="<?php echo htmlspecialchars($artist['name'] ?? $artist['username'] ?? 'Artist'); ?>" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;">
+                        <?php 
+                        // Get artist avatar - prioritize avatar from query, fallback to fetching from users table
+                        $artist_avatar = $artist['avatar'] ?? '';
+                        if (empty($artist_avatar) && !empty($artist['id']) && $conn) {
+                            try {
+                                $avatarStmt = $conn->prepare("SELECT avatar FROM users WHERE id = ?");
+                                $avatarStmt->execute([$artist['id']]);
+                                $avatarData = $avatarStmt->fetch(PDO::FETCH_ASSOC);
+                                if ($avatarData && !empty($avatarData['avatar'])) {
+                                    $artist_avatar = $avatarData['avatar'];
+                                }
+                            } catch (Exception $e) {
+                                error_log("Error fetching artist avatar: " . $e->getMessage());
+                            }
+                        }
+                        ?>
+                        <?php if (!empty($artist_avatar) && trim($artist_avatar) !== ''): ?>
+                        <img src="<?php echo htmlspecialchars($artist_avatar); ?>" alt="<?php echo htmlspecialchars($artist['name'] ?? $artist['username'] ?? 'Artist'); ?>" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\'position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-size: 48px;\'><i class=\'fas fa-user\'></i></div>';">
                         <?php else: ?>
                         <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-size: 48px;">
                             <i class="fas fa-user"></i>
