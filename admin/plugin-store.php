@@ -270,13 +270,18 @@ $installed_plugins = [];
 
 try {
     if (class_exists('PluginLoader')) {
+        // Re-initialize to ensure plugins are loaded
+        PluginLoader::init();
+        
         $all_plugins = PluginLoader::getPlugins();
         $active_plugins = PluginLoader::getActivePlugins();
         
         foreach ($all_plugins as $plugin_slug => $plugin) {
+            // Use folder name as key (plugin slug)
             $installed_plugins[$plugin_slug] = [
                 'name' => $plugin['data']['Name'] ?? $plugin_slug,
-                'active' => in_array($plugin['file'], $active_plugins)
+                'active' => in_array($plugin['file'], $active_plugins),
+                'file' => $plugin['file']
             ];
         }
     }
@@ -343,8 +348,29 @@ include 'includes/header.php';
     <div class="card-body">
         <div class="plugin-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
             <?php foreach ($available_plugins as $plugin): 
-                $is_installed = isset($installed_plugins[$plugin['plugin_slug']]);
-                $is_active = $is_installed && $installed_plugins[$plugin['plugin_slug']]['active'];
+                // Check if plugin is installed by matching slug with folder name
+                $is_installed = false;
+                $is_active = false;
+                $plugin_slug = $plugin['plugin_slug'] ?? '';
+                
+                // Check by exact slug match first
+                if (isset($installed_plugins[$plugin_slug])) {
+                    $is_installed = true;
+                    $is_active = $installed_plugins[$plugin_slug]['active'];
+                } else {
+                    // Check by folder name or file path
+                    foreach ($installed_plugins as $installed_slug => $installed_data) {
+                        $plugin_file = $installed_data['file'] ?? '';
+                        // Check if plugin slug matches folder name or is in file path
+                        if (strpos($plugin_file, $plugin_slug) !== false || 
+                            basename(dirname($plugin_file)) === $plugin_slug ||
+                            $installed_slug === $plugin_slug) {
+                            $is_installed = true;
+                            $is_active = $installed_data['active'];
+                            break;
+                        }
+                    }
+                }
             ?>
             <div class="plugin-card" style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px;">
                 <h3 style="margin: 0 0 10px 0;"><?php echo htmlspecialchars($plugin['plugin_name']); ?></h3>
