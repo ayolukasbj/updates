@@ -18,6 +18,8 @@ class PluginLoader {
         'actions' => [],
         'filters' => []
     ];
+    private static $admin_menus = [];
+    private static $admin_submenus = [];
     private static $loaded = false;
     
     /**
@@ -518,6 +520,40 @@ class PluginLoader {
         }
         
         return rmdir($dir);
+    }
+    
+    /**
+     * Register an admin menu item
+     */
+    public static function registerAdminMenu($menu_data) {
+        self::$admin_menus[] = $menu_data;
+    }
+    
+    /**
+     * Register an admin submenu item
+     */
+    public static function registerAdminSubmenu($submenu_data) {
+        if (!isset(self::$admin_submenus[$submenu_data['parent_slug']])) {
+            self::$admin_submenus[$submenu_data['parent_slug']] = [];
+        }
+        self::$admin_submenus[$submenu_data['parent_slug']][] = $submenu_data;
+    }
+    
+    /**
+     * Get all registered admin menu items
+     */
+    public static function getAdminMenus() {
+        return self::$admin_menus;
+    }
+    
+    /**
+     * Get all registered admin submenu items for a parent
+     */
+    public static function getAdminSubmenus($parent_slug = null) {
+        if ($parent_slug === null) {
+            return self::$admin_submenus;
+        }
+        return isset(self::$admin_submenus[$parent_slug]) ? self::$admin_submenus[$parent_slug] : [];
     }
 }
 

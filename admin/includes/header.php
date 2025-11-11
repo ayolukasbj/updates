@@ -4,6 +4,32 @@ if (defined('ADMIN_HEADER_INCLUDED')) {
     return;
 }
 define('ADMIN_HEADER_INCLUDED', true);
+
+// Load plugin system to get registered menu items
+if (!class_exists('PluginLoader')) {
+    if (file_exists(__DIR__ . '/../../includes/plugin-loader.php')) {
+        require_once __DIR__ . '/../../includes/plugin-loader.php';
+    }
+    if (file_exists(__DIR__ . '/../../includes/plugin-api.php')) {
+        require_once __DIR__ . '/../../includes/plugin-api.php';
+    }
+}
+
+// Initialize plugin system if not already initialized
+if (class_exists('PluginLoader')) {
+    PluginLoader::init();
+    
+    // Fire admin_menu action so plugins can register their menu items
+    PluginLoader::doAction('admin_menu');
+}
+
+// Get registered admin menu items from plugins
+$plugin_menus = [];
+$plugin_submenus = [];
+if (class_exists('PluginLoader')) {
+    $plugin_menus = PluginLoader::getAdminMenus();
+    $plugin_submenus = PluginLoader::getAdminSubmenus();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -170,25 +196,63 @@ define('ADMIN_HEADER_INCLUDED', true);
                     <span>Song Editor</span>
                 </a>
                 <?php 
-                // Check if MP3 Tagger plugin is active
-                $mp3_tagger_active = false;
-                if (class_exists('PluginLoader')) {
-                    $active_plugins = PluginLoader::getActivePlugins();
-                    foreach ($active_plugins as $plugin_file) {
-                        if (strpos($plugin_file, 'mp3-tagger') !== false) {
-                            $mp3_tagger_active = true;
-                            break;
+                // Display plugin menu items
+                if (!empty($plugin_menus)) {
+                    foreach ($plugin_menus as $menu) {
+                        // Check if user has capability (for now, just check if admin)
+                        $has_capability = true; // TODO: Implement proper capability check
+                        
+                        if ($has_capability) {
+                            // Determine menu URL
+                            $menu_url = $menu['menu_slug'];
+                            // If menu_slug doesn't contain .php and doesn't have query string, add .php
+                            if (strpos($menu['menu_slug'], '.php') === false && strpos($menu['menu_slug'], '?') === false) {
+                                $menu_url = $menu['menu_slug'] . '.php';
+                            }
+                            
+                            // Determine icon
+                            $icon = 'fas fa-puzzle-piece'; // Default icon
+                            if (!empty($menu['icon_url'])) {
+                                // If icon_url is a Font Awesome class, use it
+                                if (strpos($menu['icon_url'], 'fa-') !== false) {
+                                    $icon = $menu['icon_url'];
+                                }
+                            }
+                            
+                            // Check if current page matches this menu
+                            $current_page = basename($_SERVER['PHP_SELF']);
+                            $menu_page = basename(parse_url($menu_url, PHP_URL_PATH));
+                            $is_active = ($current_page == $menu_page || 
+                                         strpos($_SERVER['PHP_SELF'], $menu_page) !== false ||
+                                         (isset($_GET['tab']) && strpos($menu_url, 'tab=') !== false && strpos($menu_url, $_GET['tab']) !== false));
+                            
+                            echo '<a href="' . htmlspecialchars($menu_url) . '" class="nav-item ' . ($is_active ? 'active' : '') . '">';
+                            echo '<i class="' . htmlspecialchars($icon) . '"></i>';
+                            echo '<span>' . htmlspecialchars($menu['menu_title']) . '</span>';
+                            echo '</a>';
+                            
+                            // Display submenus for this parent
+                            if (isset($plugin_submenus[$menu['menu_slug']])) {
+                                foreach ($plugin_submenus[$menu['menu_slug']] as $submenu) {
+                                    $submenu_url = $submenu['menu_slug'];
+                                    // If submenu_slug doesn't contain .php and doesn't have query string, add .php
+                                    if (strpos($submenu['menu_slug'], '.php') === false && strpos($submenu['menu_slug'], '?') === false) {
+                                        $submenu_url = $submenu['menu_slug'] . '.php';
+                                    }
+                                    $submenu_page = basename(parse_url($submenu_url, PHP_URL_PATH));
+                                    $submenu_active = ($current_page == $submenu_page || 
+                                                      strpos($_SERVER['PHP_SELF'], $submenu_page) !== false ||
+                                                      (isset($_GET['tab']) && strpos($submenu_url, 'tab=') !== false && strpos($submenu_url, $_GET['tab']) !== false));
+                                    echo '<a href="' . htmlspecialchars($submenu_url) . '" class="nav-item ' . ($submenu_active ? 'active' : '') . '" style="padding-left: 40px; font-size: 0.9em;">';
+                                    echo '<i class="fas fa-circle"></i>';
+                                    echo '<span>' . htmlspecialchars($submenu['menu_title']) . '</span>';
+                                    echo '</a>';
+                                }
+                            }
                         }
                     }
                 }
-                
-                // Show MP3 Tagger menu only if plugin is active
-                if ($mp3_tagger_active): ?>
-                    <a href="mp3-tagger.php?tab=settings" class="nav-item <?php echo (basename($_SERVER['PHP_SELF']) == 'mp3-tagger.php' || strpos($_SERVER['PHP_SELF'], 'mp3-tagger') !== false) ? 'active' : ''; ?>">
-                        <i class="fas fa-tag"></i>
-                        <span>MP3 Tagger</span>
-                    </a>
-                <?php endif; ?>
+                ?>
                 <a href="plugins.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'plugins.php' ? 'active' : ''; ?>">
                     <i class="fas fa-puzzle-piece"></i>
                     <span>Plugins</span>

@@ -162,34 +162,31 @@ function delete_option($option_name) {
  * Add admin menu page
  */
 function add_menu_page($page_title, $menu_title, $capability, $menu_slug, $function = '', $icon_url = '', $position = null) {
-    add_action('admin_menu', function() use ($page_title, $menu_title, $capability, $menu_slug, $function, $icon_url, $position) {
-        // This will be handled by the admin menu system
-        do_action('add_admin_menu_item', [
-            'page_title' => $page_title,
-            'menu_title' => $menu_title,
-            'capability' => $capability,
-            'menu_slug' => $menu_slug,
-            'function' => $function,
-            'icon_url' => $icon_url,
-            'position' => $position
-        ]);
-    });
+    // Register menu item directly
+    PluginLoader::registerAdminMenu([
+        'page_title' => $page_title,
+        'menu_title' => $menu_title,
+        'capability' => $capability,
+        'menu_slug' => $menu_slug,
+        'function' => $function,
+        'icon_url' => $icon_url,
+        'position' => $position
+    ]);
 }
 
 /**
  * Add admin submenu page
  */
 function add_submenu_page($parent_slug, $page_title, $menu_title, $capability, $menu_slug, $function = '') {
-    add_action('admin_menu', function() use ($parent_slug, $page_title, $menu_title, $capability, $menu_slug, $function) {
-        do_action('add_admin_submenu_item', [
-            'parent_slug' => $parent_slug,
-            'page_title' => $page_title,
-            'menu_title' => $menu_title,
-            'capability' => $capability,
-            'menu_slug' => $menu_slug,
-            'function' => $function
-        ]);
-    });
+    // Register submenu item directly
+    PluginLoader::registerAdminSubmenu([
+        'parent_slug' => $parent_slug,
+        'page_title' => $page_title,
+        'menu_title' => $menu_title,
+        'capability' => $capability,
+        'menu_slug' => $menu_slug,
+        'function' => $function
+    ]);
 }
 
 /**
