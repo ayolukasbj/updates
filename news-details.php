@@ -767,41 +767,34 @@ $share_description = !empty($news_item['share_excerpt'])
         ? htmlspecialchars(strip_tags($news_item['excerpt'])) 
         : htmlspecialchars(substr(strip_tags($news_item['content'] ?? ''), 0, 200)));
 
-// Get share image - use EXACT same logic as featured image display on page
-$share_image = '';
-$site_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') : '';
-if (empty($site_url)) {
-    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
-    $site_url = $protocol . ($_SERVER['HTTP_HOST'] ?? 'localhost');
-}
-
-// Use EXACT same logic as page display (lines 2162-2186)
-$img_path = '';
+// Get share image - use EXACT same logic as featured image display on page (lines 2162-2196)
+// First, get the featured_image exactly as the page does
+$featured_image_for_share = '';
 
 // Use image field directly (same as homepage slider and page display)
 if (!empty($news_item['image']) && trim($news_item['image']) !== '') {
-    $img_path = trim($news_item['image']);
+    $featured_image_for_share = trim($news_item['image']);
 } 
 // Fallback to featured_image if image is empty
 elseif (!empty($news_item['featured_image']) && trim($news_item['featured_image']) !== '') {
-    $img_path = trim($news_item['featured_image']);
+    $featured_image_for_share = trim($news_item['featured_image']);
 } 
 // Fallback to display_image
 elseif (!empty($news_item['display_image']) && trim($news_item['display_image']) !== '') {
-    $img_path = trim($news_item['display_image']);
+    $featured_image_for_share = trim($news_item['display_image']);
 }
 
 // If still empty, query database directly (same as page does)
-if (empty($img_path) && !empty($news_item['id'])) {
+if (empty($featured_image_for_share) && !empty($news_item['id'])) {
     try {
         $imgStmt = $conn->prepare("SELECT image, featured_image FROM news WHERE id = ?");
         $imgStmt->execute([$news_item['id']]);
         $imgData = $imgStmt->fetch(PDO::FETCH_ASSOC);
         if ($imgData) {
             if (!empty($imgData['image']) && trim($imgData['image']) !== '') {
-                $img_path = trim($imgData['image']);
+                $featured_image_for_share = trim($imgData['image']);
             } elseif (!empty($imgData['featured_image']) && trim($imgData['featured_image']) !== '') {
-                $img_path = trim($imgData['featured_image']);
+                $featured_image_for_share = trim($imgData['featured_image']);
             }
         }
     } catch (Exception $e) {
@@ -809,21 +802,28 @@ if (empty($img_path) && !empty($news_item['id'])) {
     }
 }
 
-// Convert to absolute URL (same format as page uses)
-if (!empty($img_path)) {
+// Convert to absolute URL for Open Graph
+$share_image = '';
+$site_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') : '';
+if (empty($site_url)) {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+    $site_url = $protocol . ($_SERVER['HTTP_HOST'] ?? 'localhost');
+}
+
+if (!empty($featured_image_for_share)) {
     // If already absolute, use as is
-    if (strpos($img_path, 'http://') === 0 || strpos($img_path, 'https://') === 0) {
-        $share_image = $img_path;
+    if (strpos($featured_image_for_share, 'http://') === 0 || strpos($featured_image_for_share, 'https://') === 0) {
+        $share_image = $featured_image_for_share;
     } else {
-        // Make absolute URL
-        $img_path = ltrim($img_path, '/');
-        $share_image = $site_url . '/' . $img_path;
+        // Make absolute URL (same as page uses - no asset_path conversion)
+        $featured_image_for_share = ltrim($featured_image_for_share, '/');
+        $share_image = $site_url . '/' . $featured_image_for_share;
     }
 } else {
     $share_image = $site_url . '/assets/images/default-news.jpg';
 }
 
-error_log("News share image - Using same logic as page display. Final URL: " . $share_image);
+error_log("News share image - Using EXACT same logic as page display. Image: " . $featured_image_for_share . ", Final URL: " . $share_image);
 
 // Calculate share count (using views as proxy)
 $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% share rate
