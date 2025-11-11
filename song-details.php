@@ -3747,7 +3747,7 @@ if (!function_exists('asset_path')) {
                 // Wait a bit for duration to be available
                 setTimeout(function() {
                     if (audio.duration && !isNaN(audio.duration) && audio.duration > 0) {
-                        updateTotalTime();
+                updateTotalTime();
                     } else {
                         // Try again after a short delay
                         setTimeout(function() {
@@ -3955,10 +3955,10 @@ if (!function_exists('asset_path')) {
             } else {
                 console.error('Play button not found for event listener');
             }
-            
+        
             function updatePlayButton() {
                 if (playBtn) {
-                    playBtn.innerHTML = isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
+                playBtn.innerHTML = isPlaying ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>';
                 }
             }
             
@@ -4225,8 +4225,8 @@ if (!function_exists('asset_path')) {
                     if (directDownloadUrl && directDownloadUrl !== '#') {
                         window.location.href = directDownloadUrl;
                     } else {
-                        // Show error message to user
-                        alert('Download failed. Please try again or contact support.\n\nError: ' + error.message);
+                    // Show error message to user
+                    alert('Download failed. Please try again or contact support.\n\nError: ' + error.message);
                     }
                 });
                 

@@ -25,6 +25,11 @@ if (file_exists(__DIR__ . '/../config/config.php')) {
 }
 require_once __DIR__ . '/../config/database.php';
 
+// Load file sync utility for automatic file copying to updates folder
+if (file_exists(__DIR__ . '/../includes/file-sync.php')) {
+    require_once __DIR__ . '/../includes/file-sync.php';
+}
+
 try {
     $db = new Database();
     $conn = $db->getConnection();

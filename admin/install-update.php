@@ -66,6 +66,35 @@ include 'includes/header.php';
     </div>
 </div>
 
+<div class="card" style="margin-bottom: 30px;">
+    <div class="card-header">
+        <h2>Sync Files to Updates Folder</h2>
+    </div>
+    <div class="card-body">
+        <p style="margin-bottom: 20px; color: #666;">
+            Copy all updated files to the updates folder: <code>C:\Users\HYLINK\Desktop\music - Copy\updates</code>
+            <br><small>This will sync all platform files (excluding config, uploads, backups, etc.) to the updates folder.</small>
+        </p>
+        <div id="sync-progress" style="display: none;">
+            <div style="background: #f3f4f6; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <div id="sync-step" style="margin-bottom: 10px; font-weight: 600;">Syncing files...</div>
+                <div style="background: #e5e7eb; height: 20px; border-radius: 10px; overflow: hidden;">
+                    <div id="sync-bar" style="background: #10b981; height: 100%; width: 0%; transition: width 0.3s; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: 600;">
+                        Processing...
+                    </div>
+                </div>
+            </div>
+            <div id="sync-log" style="background: #1f2937; color: #10b981; padding: 15px; border-radius: 6px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; margin-top: 15px;">
+                <div>Starting sync...</div>
+            </div>
+        </div>
+        <button id="sync-all-btn" class="btn btn-success" style="padding: 12px 30px;">
+            <i class="fas fa-sync"></i> Sync All Files to Updates Folder
+        </button>
+        <div id="sync-result" style="margin-top: 15px;"></div>
+    </div>
+</div>
+
 <?php if ($update_info): ?>
 <div class="card" style="margin-bottom: 30px;">
     <div class="card-header">
@@ -117,6 +146,66 @@ include 'includes/header.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Sync all files functionality
+    const syncBtn = document.getElementById('sync-all-btn');
+    if (syncBtn) {
+        syncBtn.addEventListener('click', function() {
+            if (!confirm('This will copy all platform files to the updates folder. Continue?')) {
+                return;
+            }
+            
+            syncBtn.disabled = true;
+            document.getElementById('sync-progress').style.display = 'block';
+            const syncStep = document.getElementById('sync-step');
+            const syncBar = document.getElementById('sync-bar');
+            const syncLog = document.getElementById('sync-log');
+            const syncResult = document.getElementById('sync-result');
+            
+            function addLog(message) {
+                const logEntry = document.createElement('div');
+                logEntry.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+                syncLog.appendChild(logEntry);
+                syncLog.scrollTop = syncLog.scrollHeight;
+            }
+            
+            syncStep.textContent = 'Syncing files to updates folder...';
+            syncBar.style.width = '50%';
+            addLog('Starting file sync...');
+            
+            fetch('api/install-update.php?action=sync-all', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                syncBar.style.width = '100%';
+                if (data.success) {
+                    syncStep.textContent = 'Sync Complete!';
+                    addLog('Sync completed successfully!');
+                    addLog('Files copied: ' + data.copied);
+                    addLog('Files skipped: ' + data.skipped);
+                    if (data.duration_seconds) {
+                        addLog('Duration: ' + data.duration_seconds + ' seconds');
+                    }
+                    syncResult.innerHTML = '<div class="alert alert-success" style="margin-top: 15px;"><i class="fas fa-check-circle"></i> Sync completed! ' + data.copied + ' files copied, ' + data.skipped + ' files skipped.</div>';
+                } else {
+                    syncStep.textContent = 'Sync Failed';
+                    addLog('ERROR: ' + (data.error || 'Unknown error'));
+                    syncResult.innerHTML = '<div class="alert alert-danger" style="margin-top: 15px;"><i class="fas fa-exclamation-circle"></i> Sync failed: ' + (data.error || 'Unknown error') + '</div>';
+                }
+                syncBtn.disabled = false;
+            })
+            .catch(error => {
+                syncStep.textContent = 'Sync Error';
+                addLog('ERROR: ' + error.message);
+                syncResult.innerHTML = '<div class="alert alert-danger" style="margin-top: 15px;"><i class="fas fa-exclamation-circle"></i> Sync error: ' + error.message + '</div>';
+                syncBtn.disabled = false;
+            });
+        });
+    }
+    
     const startBtn = document.getElementById('start-update');
     if (!startBtn) return;
     
@@ -153,6 +242,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // Step 1: Create backup
         updateProgress('Step 1: Creating Backup', 10, 'Creating backup of current files...');
         
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout
+        
         fetch('api/install-update.php?action=backup', {
             method: 'POST',
             headers: {
@@ -160,14 +253,29 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: JSON.stringify({
                 version: '<?php echo htmlspecialchars($update_info['version']); ?>'
-            })
+            }),
+            signal: controller.signal
         })
-        .then(response => response.json())
+        .then(response => {
+            clearTimeout(timeoutId);
+            if (!response.ok) {
+                throw new Error('Network response was not ok: ' + response.status);
+            }
+            return response.json();
+        })
         .then(data => {
             if (!data.success) {
-                throw new Error(data.error || 'Backup failed');
+                // Ask user if they want to continue without backup
+                const continueWithoutBackup = confirm('Backup creation failed: ' + (data.error || 'Unknown error') + '\n\nDo you want to continue without backup? (Not recommended)');
+                if (!continueWithoutBackup) {
+                    throw new Error('Update cancelled by user');
+                }
+                updateProgress('Step 2: Downloading Update', 30, 'Continuing without backup (not recommended). Downloading update...');
+            } else {
+                const fileCount = data.files_count || 0;
+                const sizeMB = data.backup_size_mb || 0;
+                updateProgress('Step 2: Downloading Update', 30, 'Backup created successfully (' + fileCount + ' files, ' + sizeMB + 'MB). Downloading update...');
             }
-            updateProgress('Step 2: Downloading Update', 30, 'Backup created successfully. Downloading update...');
             
             // Step 2: Download update
             return fetch('api/install-update.php?action=download', {
@@ -249,8 +357,14 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 2000);
         })
         .catch(error => {
-            updateProgress('Error', 0, 'ERROR: ' + error.message);
-            progressBar.style.background = '#ef4444';
+            clearTimeout(timeoutId);
+            if (error.name === 'AbortError') {
+                updateProgress('Error', 0, 'ERROR: Backup operation timed out after 5 minutes. The backup may still be processing in the background.');
+                progressBar.style.background = '#ef4444';
+            } else {
+                updateProgress('Error', 0, 'ERROR: ' + error.message);
+                progressBar.style.background = '#ef4444';
+            }
             
             // Show error and rollback option
             setTimeout(function() {

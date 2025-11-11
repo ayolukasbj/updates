@@ -201,6 +201,11 @@ function updateConfigFile($key, $value) {
         $replacement = "define('$key', '" . addslashes($value) . "');";
         $content = preg_replace($pattern, $replacement, $content);
         file_put_contents($config_file, $content);
+        
+        // Sync updated config file to updates folder
+        if (function_exists('syncFileToUpdates')) {
+            syncFileToUpdates($config_file);
+        }
     }
 }
 

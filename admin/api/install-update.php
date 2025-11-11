@@ -21,6 +21,17 @@ if (!isSuperAdmin()) {
 ob_clean();
 header('Content-Type: application/json');
 
+// Increase execution time and memory limits for operations
+// Set reasonable limits to prevent infinite hangs
+set_time_limit(300); // 5 minutes max
+ini_set('max_execution_time', 300);
+ini_set('memory_limit', '512M');
+
+// Disable output buffering for long operations
+if (ob_get_level() > 0) {
+    ob_end_clean();
+}
+
 $action = $_GET['action'] ?? '';
 $input = json_decode(file_get_contents('php://input'), true);
 
@@ -42,56 +53,161 @@ function logMessage($message) {
 function createBackup($backup_dir) {
     global $backup_dir;
     
+    // Set execution limits for backup
+    set_time_limit(300); // 5 minutes max
+    ini_set('max_execution_time', 300);
+    ini_set('memory_limit', '512M');
+    
     $timestamp = date('Y-m-d_H-i-s');
     $backup_path = $backup_dir . 'backup_' . $timestamp . '.zip';
     
     // Files and directories to backup (exclude backups, updates, temp, uploads)
-    $exclude = [
+    // More aggressive exclusions to speed up backup
+    $exclude_dirs = [
         'backups',
         'updates',
         'temp',
         'uploads',
         'node_modules',
-        '.git'
+        '.git',
+        'vendor',
+        'cache',
+        'logs',
+        'database',
+        'backup',
+        'assets/vendor', // Exclude vendor assets
+        'plugins', // Exclude plugins (can be reinstalled)
+        '.vscode',
+        '.idea'
     ];
     
-    $root_path = realpath(__DIR__ . '/../../');
-    $zip = new ZipArchive();
+    // File extensions to exclude
+    $exclude_extensions = ['log', 'tmp', 'cache', 'swp', 'bak'];
     
-    if ($zip->open($backup_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== TRUE) {
-        throw new Exception('Cannot create backup file');
+    // Maximum file size to include (5MB) - skip very large files to speed up
+    $max_file_size = 5 * 1024 * 1024; // 5MB
+    
+    $root_path = realpath(__DIR__ . '/../../');
+    
+    if (!$root_path) {
+        throw new Exception('Cannot determine root path');
     }
     
+    // Check if ZipArchive is available
+    if (!class_exists('ZipArchive')) {
+        throw new Exception('ZipArchive class not available. Please install php-zip extension.');
+    }
+    
+    $zip = new ZipArchive();
+    
+    // Use a temporary file first, then move it
+    $temp_backup_path = $backup_path . '.tmp';
+    
+    if ($zip->open($temp_backup_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== TRUE) {
+        throw new Exception('Cannot create backup file: ' . $temp_backup_path);
+    }
+    
+    // Pre-build exclusion patterns for faster checking
+    $exclude_patterns = [];
+    foreach ($exclude as $excluded) {
+        $exclude_patterns[] = '/' . preg_quote($excluded, '/') . '/';
+    }
+    
+    // Use optimized iterator with flags to skip . and ..
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($root_path),
-        RecursiveIteratorIterator::SELF_FIRST
+        new RecursiveDirectoryIterator($root_path, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::LEAVES_ONLY // Only files, not directories
     );
     
     $added = 0;
+    $skipped = 0;
+    $start_time = time();
+    $max_duration = 240; // 4 minutes max (leave 1 minute buffer)
+    
     foreach ($iterator as $file) {
-        $filePath = $file->getRealPath();
-        $relativePath = substr($filePath, strlen($root_path) + 1);
+        // Check timeout
+        if (time() - $start_time > $max_duration) {
+            logMessage("Backup timeout reached, closing backup...");
+            break;
+        }
         
-        // Skip excluded directories
+        $filePath = $file->getRealPath();
+        
+        // Skip if file doesn't exist or is not readable
+        if (!file_exists($filePath) || !is_readable($filePath)) {
+            $skipped++;
+            continue;
+        }
+        
+        // Skip if file is too large (check without reading full file)
+        $fileSize = @filesize($filePath);
+        if ($fileSize === false || $fileSize > $max_file_size) {
+            $skipped++;
+            continue;
+        }
+        
+        $relativePath = str_replace('\\', '/', substr($filePath, strlen($root_path) + 1));
+        
+        // Fast exclusion check using string position
         $skip = false;
-        foreach ($exclude as $excluded) {
-            if (strpos($relativePath, $excluded) === 0) {
+        
+        // Check directory exclusions
+        foreach ($exclude_dirs as $excluded) {
+            if (strpos($relativePath, $excluded . '/') === 0 || strpos($relativePath, '/' . $excluded . '/') !== false) {
                 $skip = true;
                 break;
             }
         }
         
-        if ($skip || $file->isDir()) {
+        // Check file extension exclusions
+        if (!$skip) {
+            $file_ext = strtolower(pathinfo($relativePath, PATHINFO_EXTENSION));
+            if (in_array($file_ext, $exclude_extensions)) {
+                $skip = true;
+            }
+        }
+        
+        if ($skip) {
             continue;
         }
         
-        $zip->addFile($filePath, $relativePath);
-        $added++;
+        // Add file to zip (use addFile for better performance than addFromString)
+        try {
+            if ($zip->addFile($filePath, $relativePath)) {
+                $added++;
+            } else {
+                $skipped++;
+            }
+        } catch (Exception $e) {
+            logMessage("Error adding file to backup: $filePath - " . $e->getMessage());
+            $skipped++;
+        }
+        
+        // Periodically check if we should continue
+        if ($added % 500 == 0) {
+            // Force garbage collection every 500 files
+            if (function_exists('gc_collect_cycles')) {
+                gc_collect_cycles();
+            }
+        }
     }
     
-    $zip->close();
+    // Close zip file
+    if (!$zip->close()) {
+        @unlink($temp_backup_path);
+        throw new Exception('Failed to close backup ZIP file');
+    }
     
-    logMessage("Backup created: $backup_path ($added files)");
+    // Move temp file to final location
+    if (!rename($temp_backup_path, $backup_path)) {
+        @unlink($temp_backup_path);
+        throw new Exception('Failed to finalize backup file');
+    }
+    
+    $duration = time() - $start_time;
+    $backup_size_mb = file_exists($backup_path) ? round(filesize($backup_path) / 1024 / 1024, 2) : 0;
+    
+    logMessage("Backup created: $backup_path ($added files, $skipped skipped, {$backup_size_mb}MB, {$duration}s)");
     
     // Store backup path in session
     $_SESSION['last_backup'] = $backup_path;
@@ -99,7 +215,10 @@ function createBackup($backup_dir) {
     return [
         'success' => true,
         'backup_path' => $backup_path,
-        'files_count' => $added
+        'files_count' => $added,
+        'skipped_count' => $skipped,
+        'backup_size_mb' => $backup_size_mb,
+        'duration_seconds' => $duration
     ];
 }
 
@@ -489,6 +608,12 @@ function installFiles($extract_path, $root_path) {
             logMessage("ERROR: $error_msg");
         } else {
             $copied++;
+            
+            // Automatically sync installed file to updates folder
+            if (function_exists('syncFileToUpdates')) {
+                @syncFileToUpdates($target_path);
+            }
+            
             if ($copied % 10 === 0) {
                 logMessage("Copied $copied files...");
             }
@@ -636,10 +761,42 @@ function rollbackUpdate($backup_path) {
     }
 }
 
+// Function to sync all updated files to updates folder
+function syncAllFilesToUpdates() {
+    if (!function_exists('syncDirectoryToUpdates')) {
+        require_once __DIR__ . '/../../includes/file-sync.php';
+    }
+    
+    $root_path = realpath(__DIR__ . '/../../');
+    $result = syncDirectoryToUpdates('.');
+    
+    return [
+        'success' => $result['success'] ?? false,
+        'copied' => $result['copied'] ?? 0,
+        'skipped' => $result['skipped'] ?? 0,
+        'errors' => $result['errors'] ?? []
+    ];
+}
+
 try {
     switch ($action) {
         case 'backup':
-            $result = createBackup($backup_dir);
+            try {
+                $result = createBackup($backup_dir);
+                echo json_encode($result);
+            } catch (Exception $e) {
+                logMessage("Backup error: " . $e->getMessage());
+                // Return error but don't fail completely
+                echo json_encode([
+                    'success' => false,
+                    'error' => $e->getMessage(),
+                    'warning' => 'Backup failed but you can continue without backup (not recommended)'
+                ]);
+            }
+            break;
+            
+        case 'sync-all':
+            $result = syncAllFilesToUpdates();
             echo json_encode($result);
             break;
             
@@ -678,7 +835,23 @@ try {
                 throw new Exception('Extracted files not found');
             }
             
+            // Load file sync utility if not already loaded
+            if (!function_exists('syncFileToUpdates')) {
+                require_once __DIR__ . '/../../includes/file-sync.php';
+            }
+            
             $result = installFiles($extract_path, $root_path);
+            
+            // After installation, sync all installed files to updates folder
+            logMessage("Syncing installed files to updates folder...");
+            try {
+                $sync_result = syncAllFilesToUpdates();
+                logMessage("Sync complete: " . ($sync_result['copied'] ?? 0) . " files synced");
+            } catch (Exception $e) {
+                logMessage("Sync warning: " . $e->getMessage());
+                // Don't fail installation if sync fails
+            }
+            
             echo json_encode($result);
             break;
             

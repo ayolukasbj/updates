@@ -236,6 +236,16 @@ function getFeaturedSongs($limit = 8) {
         $db = new Database();
         $conn = $db->getConnection();
         
+        // Check if is_featured column exists
+        $hasFeaturedColumn = false;
+        try {
+            $colCheck = $conn->query("SHOW COLUMNS FROM songs LIKE 'is_featured'");
+            $hasFeaturedColumn = $colCheck->rowCount() > 0;
+        } catch (Exception $e) {
+            $hasFeaturedColumn = false;
+        }
+        
+        if ($hasFeaturedColumn) {
         $stmt = $conn->prepare("
             SELECT s.*, 
                    s.uploaded_by,
@@ -246,10 +256,26 @@ function getFeaturedSongs($limit = 8) {
             FROM songs s
             LEFT JOIN users u ON s.uploaded_by = u.id
             WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-            AND (s.is_featured = 1 OR s.is_featured IS NULL)
+                AND s.is_featured = 1
             ORDER BY s.id DESC
             LIMIT ?
         ");
+        } else {
+            // Fallback: get newest songs if is_featured column doesn't exist
+            $stmt = $conn->prepare("
+                SELECT s.*, 
+                       s.uploaded_by,
+                       COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
+                       COALESCE(s.is_collaboration, 0) as is_collaboration,
+                       COALESCE(s.plays, 0) as plays,
+                       COALESCE(s.downloads, 0) as downloads
+                FROM songs s
+                LEFT JOIN users u ON s.uploaded_by = u.id
+                WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
+                ORDER BY COALESCE(s.upload_date, s.created_at, s.uploaded_at) DESC, s.id DESC
+                LIMIT ?
+            ");
+        }
         $stmt->execute([$limit]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (Exception $e) {
@@ -316,13 +342,13 @@ function getRecentSongs($limit = 6) {
         error_log("Stack trace: " . $e->getTraceAsString());
         // Fallback to getSongs method
         try {
-            $songs = getSongs();
-            usort($songs, function($a, $b) {
+    $songs = getSongs();
+    usort($songs, function($a, $b) {
                 $time_a = strtotime($b['uploaded_at'] ?? '1970-01-01');
                 $time_b = strtotime($a['uploaded_at'] ?? '1970-01-01');
                 return $time_a - $time_b;
-            });
-            return array_slice($songs, 0, $limit);
+    });
+    return array_slice($songs, 0, $limit);
         } catch (Exception $e2) {
             error_log("Fallback error in getRecentSongs(): " . $e2->getMessage());
             return [];

@@ -167,6 +167,11 @@ add_action('song_uploaded', function($song_id, $song_data) {
         return; // Auto-tagging disabled
     }
     
+    // Check if auto-sync is enabled (separate from auto-tagging)
+    // Auto-tagging runs on upload, auto-sync runs in background for existing files
+    $auto_sync_enabled = get_option('id3_auto_sync_enabled', '0');
+    // Note: Auto-sync is handled separately via cron or manual trigger
+    
     try {
         // Get song data from database
         if (!function_exists('get_db_connection')) {

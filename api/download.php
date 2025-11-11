@@ -247,13 +247,13 @@ try {
                 $generated_filename = trim($generated_filename, '-');
             } else {
                 // Use custom template
-                $generated_filename = str_replace(
-                    ['{TITLE}', '{ARTIST}', '{SITE_NAME}'],
-                    [$title_clean, $artist_clean, $site_clean],
-                    $filename_template
-                );
-                $generated_filename = preg_replace('/[^a-zA-Z0-9_\-\[\]() ]/', '', $generated_filename);
-                $generated_filename = trim($generated_filename);
+            $generated_filename = str_replace(
+                ['{TITLE}', '{ARTIST}', '{SITE_NAME}'],
+                [$title_clean, $artist_clean, $site_clean],
+                $filename_template
+            );
+            $generated_filename = preg_replace('/[^a-zA-Z0-9_\-\[\]() ]/', '', $generated_filename);
+            $generated_filename = trim($generated_filename);
             }
             
             // Use generated filename or actual filename if it looks like it matches the pattern
