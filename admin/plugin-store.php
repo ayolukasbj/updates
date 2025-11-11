@@ -288,27 +288,98 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                 $plugin_file = $extract_dir . $plugin_slug . '.php';
             }
             
-            // If main plugin file not found, search for any PHP file
+            // If main plugin file not found, search for the main plugin file
             if (!file_exists($plugin_file)) {
-                $php_files = glob($extract_dir . '**/*.php', GLOB_BRACE);
-                if (empty($php_files)) {
-                    $php_files = glob($extract_dir . '*.php');
+                // First, try to find the main plugin file (not in admin/ or includes/ folders)
+                $search_paths = [
+                    $extract_dir . $plugin_slug . '/' . $plugin_slug . '.php', // plugins/plugin-slug/plugin-slug.php
+                    $extract_dir . $plugin_slug . '.php', // plugins/plugin-slug.php (if files extracted to root)
+                ];
+                
+                foreach ($search_paths as $search_path) {
+                    if (file_exists($search_path)) {
+                        $plugin_file = $search_path;
+                        break;
+                    }
                 }
-                if (!empty($php_files)) {
-                    $plugin_file = $php_files[0];
-                    // If file is in a subdirectory, ensure proper structure
-                    $relative_path = str_replace($extract_dir, '', $plugin_file);
-                    if (strpos($relative_path, '/') !== false) {
-                        // File is in subdirectory, this is correct structure
-                    } else {
-                        // File is in root, move to plugin folder
-                        $proper_dir = $extract_dir . $plugin_slug . '/';
-                        if (!is_dir($proper_dir)) {
-                            @mkdir($proper_dir, 0755, true);
+                
+                // If still not found, search for PHP files but exclude admin/ and includes/ folders
+                if (!file_exists($plugin_file)) {
+                    $all_php_files = glob($extract_dir . '**/*.php', GLOB_BRACE);
+                    if (empty($all_php_files)) {
+                        $all_php_files = glob($extract_dir . '*.php');
+                    }
+                    
+                    // Filter out admin/ and includes/ files, prioritize root-level files
+                    $root_files = [];
+                    $other_files = [];
+                    
+                    foreach ($all_php_files as $php_file) {
+                        $relative = str_replace($extract_dir, '', $php_file);
+                        // Skip admin/, includes/, and other subdirectories
+                        if (strpos($relative, 'admin/') === 0 || 
+                            strpos($relative, 'includes/') === 0 ||
+                            strpos($relative, 'assets/') === 0) {
+                            continue;
                         }
-                        $new_path = $proper_dir . basename($plugin_file);
-                        rename($plugin_file, $new_path);
-                        $plugin_file = $new_path;
+                        
+                        // Check if it's in the plugin root folder
+                        if (strpos($relative, '/') === false || 
+                            strpos($relative, $plugin_slug . '/') === 0) {
+                            // Prioritize files named after plugin slug
+                            if (basename($php_file, '.php') === $plugin_slug) {
+                                array_unshift($root_files, $php_file);
+                            } else {
+                                $root_files[] = $php_file;
+                            }
+                        } else {
+                            $other_files[] = $php_file;
+                        }
+                    }
+                    
+                    // Use root files first, then other files
+                    $php_files = array_merge($root_files, $other_files);
+                    
+                    if (!empty($php_files)) {
+                        $plugin_file = $php_files[0];
+                        error_log("Plugin installation: Using found PHP file: {$plugin_file}");
+                        
+                        // If file is in a subdirectory (but not admin/includes), ensure proper structure
+                        $relative_path = str_replace($extract_dir, '', $plugin_file);
+                        if (strpos($relative_path, '/') !== false && 
+                            strpos($relative_path, $plugin_slug . '/') !== 0) {
+                            // File is in wrong subdirectory, move to plugin folder
+                            $proper_dir = $extract_dir . $plugin_slug . '/';
+                            if (!is_dir($proper_dir)) {
+                                @mkdir($proper_dir, 0755, true);
+                            }
+                            $new_path = $proper_dir . basename($plugin_file);
+                            if (rename($plugin_file, $new_path)) {
+                                $plugin_file = $new_path;
+                                error_log("Plugin installation: Moved plugin file to: {$plugin_file}");
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Final check - make sure we have a valid plugin file
+            if (!file_exists($plugin_file)) {
+                throw new Exception('Main plugin file not found. Expected: ' . $plugin_slug . '.php in ' . $extract_dir);
+            }
+            
+            // Verify this is the main plugin file (check for plugin header)
+            $file_content = @file_get_contents($plugin_file);
+            if ($file_content && (strpos($file_content, 'Plugin Name:') === false && strpos($file_content, 'Plugin Name') === false)) {
+                error_log("Plugin installation WARNING: File {$plugin_file} may not be the main plugin file (no Plugin Name header found)");
+                // Try to find the actual main plugin file
+                $all_files = glob($extract_dir . $plugin_slug . '/*.php');
+                foreach ($all_files as $test_file) {
+                    $test_content = @file_get_contents($test_file);
+                    if ($test_content && (strpos($test_content, 'Plugin Name:') !== false || strpos($test_content, 'Plugin Name') !== false)) {
+                        $plugin_file = $test_file;
+                        error_log("Plugin installation: Found main plugin file: {$plugin_file}");
+                        break;
                     }
                 }
             }
