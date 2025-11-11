@@ -320,7 +320,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                 }
                 
                 // Activate the plugin (this saves it to database)
-                if (PluginLoader::activatePlugin($plugin_file_normalized)) {
+                $activation_result = PluginLoader::activatePlugin($plugin_file_normalized);
+                if ($activation_result) {
                     // Force reload plugins to detect the newly installed one
                     try {
                         PluginLoader::init(true); // Force reload
@@ -330,7 +331,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                     }
                     $success = 'Plugin "' . htmlspecialchars($plugin_name) . '" installed and activated successfully!';
                 } else {
-                    throw new Exception('Failed to activate plugin. Please try activating it manually from the Plugins page.');
+                    // Get more detailed error information
+                    $error_details = error_get_last();
+                    $error_msg = 'Failed to activate plugin.';
+                    if ($error_details) {
+                        $error_msg .= ' Error: ' . $error_details['message'];
+                    }
+                    error_log("Plugin activation failed for: {$plugin_file_normalized}");
+                    throw new Exception($error_msg . ' Please try activating it manually from the Plugins page.');
                 }
             } else {
                 throw new Exception('Plugin file not found after extraction: ' . $plugin_file);
