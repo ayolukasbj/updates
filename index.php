@@ -2388,6 +2388,16 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                     max-height: none !important;
                     overflow-y: visible !important;
                 }
+                .recently-uploaded-sidebar > div {
+                    display: grid !important;
+                    grid-template-columns: repeat(2, 1fr) !important;
+                    gap: 15px !important;
+                }
+                .recently-uploaded-sidebar > div > div {
+                    margin-bottom: 0 !important;
+                    padding-bottom: 0 !important;
+                    border-bottom: none !important;
+                }
             }
         </style>
         
@@ -2683,14 +2693,14 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                 try {
                     if ($conn) {
                         $topArtistsStmt = $conn->prepare("
-                            SELECT u.id, u.username, 
+                            SELECT u.id, u.username, u.avatar,
                                    COUNT(DISTINCT s.id) as songs_count,
                                    COALESCE(SUM(s.plays), 0) as total_plays,
                                    COALESCE(SUM(s.downloads), 0) as total_downloads
                             FROM users u
                             LEFT JOIN songs s ON s.uploaded_by = u.id AND (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
                             WHERE u.username IS NOT NULL
-                            GROUP BY u.id, u.username
+                            GROUP BY u.id, u.username, u.avatar
                             HAVING songs_count > 0
                             ORDER BY total_plays DESC, total_downloads DESC, songs_count DESC
                             LIMIT 5
@@ -2801,8 +2811,12 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                             $artistUrl = base_url('artist/' . $artistSlug);
                         ?>
                         <a href="<?php echo $artistUrl; ?>" style="display: flex; align-items: center; gap: 12px; padding: 12px; border-bottom: <?php echo $index < count($top_artists) - 1 ? '1px solid #f0f0f0' : 'none'; ?>; text-decoration: none; color: inherit; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa';" onmouseout="this.style.background='transparent';">
-                            <div style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px;">
+                            <div style="width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, #667eea, #764ba2); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 14px;">
+                                <?php if (!empty($artist['avatar']) && trim($artist['avatar']) !== ''): ?>
+                                <img src="<?php echo htmlspecialchars($artist['avatar']); ?>" alt="<?php echo htmlspecialchars($artist['username'] ?? 'Artist'); ?>" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.style.display='none'; this.parentElement.innerHTML='<?php echo htmlspecialchars(strtoupper(substr($artist['username'] ?? 'A', 0, 1))); ?>';">
+                                <?php else: ?>
                                 <?php echo strtoupper(substr($artist['username'] ?? 'A', 0, 1)); ?>
+                                <?php endif; ?>
                             </div>
                             <div style="flex: 1; min-width: 0;">
                                 <div style="font-size: 13px; font-weight: 600; color: #333; margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
