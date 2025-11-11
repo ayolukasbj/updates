@@ -767,8 +767,7 @@ $share_description = !empty($news_item['share_excerpt'])
         ? htmlspecialchars(strip_tags($news_item['excerpt'])) 
         : htmlspecialchars(substr(strip_tags($news_item['content'] ?? ''), 0, 200)));
 
-// Get share image - check multiple possible field names
-// Ensure absolute URL for Open Graph
+// Get share image - use EXACT same logic as featured image display on page
 $share_image = '';
 $site_url = defined('SITE_URL') ? rtrim(SITE_URL, '/') : '';
 if (empty($site_url)) {
@@ -776,28 +775,33 @@ if (empty($site_url)) {
     $site_url = $protocol . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 }
 
-// Check all possible image fields in priority order
-$image_fields = ['featured_image', 'display_image', 'image'];
+// Use EXACT same logic as page display (lines 2162-2186)
 $img_path = '';
 
-foreach ($image_fields as $field) {
-    if (!empty($news_item[$field]) && trim($news_item[$field]) !== '') {
-        $img_path = trim($news_item[$field]);
-        break;
-    }
+// Use image field directly (same as homepage slider and page display)
+if (!empty($news_item['image']) && trim($news_item['image']) !== '') {
+    $img_path = trim($news_item['image']);
+} 
+// Fallback to featured_image if image is empty
+elseif (!empty($news_item['featured_image']) && trim($news_item['featured_image']) !== '') {
+    $img_path = trim($news_item['featured_image']);
+} 
+// Fallback to display_image
+elseif (!empty($news_item['display_image']) && trim($news_item['display_image']) !== '') {
+    $img_path = trim($news_item['display_image']);
 }
 
-// If still no image, try to get from database directly
+// If still empty, query database directly (same as page does)
 if (empty($img_path) && !empty($news_item['id'])) {
     try {
-        $imgStmt = $conn->prepare("SELECT featured_image, image FROM news WHERE id = ?");
+        $imgStmt = $conn->prepare("SELECT image, featured_image FROM news WHERE id = ?");
         $imgStmt->execute([$news_item['id']]);
         $imgData = $imgStmt->fetch(PDO::FETCH_ASSOC);
         if ($imgData) {
-            if (!empty($imgData['featured_image']) && trim($imgData['featured_image']) !== '') {
-                $img_path = trim($imgData['featured_image']);
-            } elseif (!empty($imgData['image']) && trim($imgData['image']) !== '') {
+            if (!empty($imgData['image']) && trim($imgData['image']) !== '') {
                 $img_path = trim($imgData['image']);
+            } elseif (!empty($imgData['featured_image']) && trim($imgData['featured_image']) !== '') {
+                $img_path = trim($imgData['featured_image']);
             }
         }
     } catch (Exception $e) {
@@ -805,12 +809,13 @@ if (empty($img_path) && !empty($news_item['id'])) {
     }
 }
 
-// Convert to absolute URL
+// Convert to absolute URL (same format as page uses)
 if (!empty($img_path)) {
+    // If already absolute, use as is
     if (strpos($img_path, 'http://') === 0 || strpos($img_path, 'https://') === 0) {
-        $share_image = $img_path; // Already absolute
+        $share_image = $img_path;
     } else {
-        // Remove leading slash if present, then add site URL
+        // Make absolute URL
         $img_path = ltrim($img_path, '/');
         $share_image = $site_url . '/' . $img_path;
     }
@@ -818,9 +823,7 @@ if (!empty($img_path)) {
     $share_image = $site_url . '/assets/images/default-news.jpg';
 }
 
-// Debug logging
-error_log("News share image - Field values: featured_image=" . ($news_item['featured_image'] ?? 'empty') . ", display_image=" . ($news_item['display_image'] ?? 'empty') . ", image=" . ($news_item['image'] ?? 'empty'));
-error_log("News share image - Final URL: " . $share_image);
+error_log("News share image - Using same logic as page display. Final URL: " . $share_image);
 
 // Calculate share count (using views as proxy)
 $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% share rate
@@ -848,9 +851,11 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
     <meta property="og:description" content="<?php echo $share_description; ?>">
     <?php if (!empty($share_image)): ?>
     <meta property="og:image" content="<?php echo htmlspecialchars($share_image); ?>">
+    <meta property="og:image:secure_url" content="<?php echo htmlspecialchars(str_replace('http://', 'https://', $share_image)); ?>">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:alt" content="<?php echo htmlspecialchars($share_title); ?>">
     <?php endif; ?>
     <meta property="og:site_name" content="<?php echo htmlspecialchars(defined('SITE_NAME') ? SITE_NAME : ''); ?>">
     

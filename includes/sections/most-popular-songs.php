@@ -4,10 +4,9 @@
  * Displays songs filtered by downloads count
  */
 
-// Load database connection if needed
-if (!function_exists('get_db_connection')) {
-    require_once __DIR__ . '/../../config/database.php';
-}
+// Load config and database - same as songs.php
+require_once __DIR__ . '/../../config/config.php';
+require_once __DIR__ . '/../../config/database.php';
 
 // Load base_url function if needed
 if (!function_exists('base_url')) {
@@ -29,17 +28,17 @@ $popular_week = [];
 $popular_month = [];
 
 try {
-    $conn = get_db_connection();
+    // Use same approach as songs.php
+    require_once __DIR__ . '/../../config/database.php';
+    $db = new Database();
+    $conn = $db->getConnection();
+    
     if ($conn) {
         $checkSongs = $conn->query("SHOW TABLES LIKE 'songs'");
         if ($checkSongs->rowCount() > 0) {
-            // Check if downloads table exists for time-based filtering
-            $checkDownloads = $conn->query("SHOW TABLES LIKE 'downloads'");
-            $hasDownloadsTable = $checkDownloads->rowCount() > 0;
-            
-            // Today - Most popular songs today (simplified - show most downloaded songs)
+            // Today - Most popular songs (most downloaded)
             try {
-                $todayQuery = "
+                $stmt = $conn->prepare("
                     SELECT s.*, 
                            s.uploaded_by,
                            COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
@@ -52,8 +51,8 @@ try {
                     WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
                     ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
                     LIMIT 5
-                ";
-                $stmt = $conn->query($todayQuery);
+                ");
+                $stmt->execute();
                 $popular_today = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 error_log("Most Popular Today: Found " . count($popular_today) . " songs");
             } catch (Exception $e) {
@@ -61,57 +60,27 @@ try {
                 $popular_today = [];
             }
             
-            // This Week - Most popular songs this week (simplified)
-            try {
-                $weekQuery = "
-                    SELECT s.*, 
-                           s.uploaded_by,
-                           COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
-                           COALESCE(s.is_collaboration, 0) as is_collaboration,
-                           COALESCE(s.plays, 0) as plays,
-                           COALESCE(s.downloads, 0) as downloads,
-                           COALESCE(s.upload_date, s.created_at, s.uploaded_at) as uploaded_at
-                    FROM songs s
-                    LEFT JOIN users u ON s.uploaded_by = u.id
-                    WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-                    ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
-                    LIMIT 5
-                ";
-                $stmt = $conn->query($weekQuery);
-                $popular_week = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                error_log("Most Popular Week: Found " . count($popular_week) . " songs");
-            } catch (Exception $e) {
-                error_log("Most Popular Week Error: " . $e->getMessage());
-                $popular_week = [];
-            }
+            // This Week - Same as today (most downloaded)
+            $popular_week = $popular_today;
             
-            // This Month - Most popular songs this month (simplified)
-            try {
-                $monthQuery = "
-                    SELECT s.*, 
-                           s.uploaded_by,
-                           COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
-                           COALESCE(s.is_collaboration, 0) as is_collaboration,
-                           COALESCE(s.plays, 0) as plays,
-                           COALESCE(s.downloads, 0) as downloads,
-                           COALESCE(s.upload_date, s.created_at, s.uploaded_at) as uploaded_at
-                    FROM songs s
-                    LEFT JOIN users u ON s.uploaded_by = u.id
-                    WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-                    ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
-                    LIMIT 5
-                ";
-                $stmt = $conn->query($monthQuery);
-                $popular_month = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                error_log("Most Popular Month: Found " . count($popular_month) . " songs");
-            } catch (Exception $e) {
-                error_log("Most Popular Month Error: " . $e->getMessage());
-                $popular_month = [];
-            }
+            // This Month - Same as today (most downloaded)
+            $popular_month = $popular_today;
+        } else {
+            $popular_today = [];
+            $popular_week = [];
+            $popular_month = [];
         }
+    } else {
+        error_log("Most Popular Section: Database connection failed");
+        $popular_today = [];
+        $popular_week = [];
+        $popular_month = [];
     }
 } catch (Exception $e) {
     error_log("Most Popular Section Query Error: " . $e->getMessage());
+    $popular_today = [];
+    $popular_week = [];
+    $popular_month = [];
 }
 ?>
 

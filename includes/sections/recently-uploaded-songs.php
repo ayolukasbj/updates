@@ -4,15 +4,9 @@
  * Displays the 6 most recently published songs
  */
 
-// Load required functions
-if (!function_exists('getRecentSongs')) {
-    require_once __DIR__ . '/../song-storage.php';
-}
-
-// Load database connection if needed
-if (!function_exists('get_db_connection')) {
-    require_once __DIR__ . '/../../config/database.php';
-}
+// Load config and database - same as songs.php
+require_once __DIR__ . '/../../config/config.php';
+require_once __DIR__ . '/../../config/database.php';
 
 // Load base_url function if needed
 if (!function_exists('base_url')) {
@@ -29,13 +23,18 @@ if (!function_exists('base_url')) {
     }
 }
 
+// Get database connection for slug generation and query
+$conn = null;
+$recent_songs = [];
+
 try {
-    // Use exact same query as songs.php
+    // Use exact same approach as songs.php
     require_once __DIR__ . '/../../config/database.php';
     $db = new Database();
     $conn = $db->getConnection();
     
     if ($conn) {
+        // Use exact same query as songs.php
         $stmt = $conn->prepare("
             SELECT s.*, 
                    s.uploaded_by,
@@ -53,17 +52,12 @@ try {
         $recent_songs = $stmt->fetchAll(PDO::FETCH_ASSOC);
         error_log("Recently Uploaded Section: Found " . count($recent_songs) . " songs");
     } else {
+        error_log("Recently Uploaded Section: Database connection failed");
         $recent_songs = [];
     }
 } catch (Exception $e) {
     error_log("Recently Uploaded Section Error: " . $e->getMessage());
     $recent_songs = [];
-}
-
-// Get database connection for slug generation
-$conn = null;
-if (function_exists('get_db_connection')) {
-    $conn = get_db_connection();
 }
 ?>
 
