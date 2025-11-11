@@ -254,11 +254,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
         
         $extract_dir = $plugins_dir . $plugin_slug . '/';
         if (is_dir($extract_dir)) {
-            // Remove existing
-            array_map('unlink', glob($extract_dir . '*'));
-            rmdir($extract_dir);
+            // Recursively remove existing directory
+            $files = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($extract_dir, RecursiveDirectoryIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::CHILD_FIRST
+            );
+            foreach ($files as $fileinfo) {
+                $todo = ($fileinfo->isDir() ? 'rmdir' : 'unlink');
+                @$todo($fileinfo->getRealPath());
+            }
+            @rmdir($extract_dir);
         }
-        mkdir($extract_dir, 0755, true);
+        // Create directory if it doesn't exist (mkdir with recursive flag won't error if it exists)
+        if (!is_dir($extract_dir)) {
+            mkdir($extract_dir, 0755, true);
+        }
         
         $zip = new ZipArchive();
         if ($zip->open($temp_file) === TRUE) {
@@ -294,7 +304,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                         // File is in root, move to plugin folder
                         $proper_dir = $extract_dir . $plugin_slug . '/';
                         if (!is_dir($proper_dir)) {
-                            mkdir($proper_dir, 0755, true);
+                            @mkdir($proper_dir, 0755, true);
                         }
                         $new_path = $proper_dir . basename($plugin_file);
                         rename($plugin_file, $new_path);

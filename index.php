@@ -189,8 +189,13 @@ try {
 
 try {
     $recent_songs = getRecentSongs(8);
+    error_log("index.php: getRecentSongs returned " . count($recent_songs) . " songs");
+    if (empty($recent_songs)) {
+        error_log("index.php: WARNING - getRecentSongs returned empty array");
+    }
 } catch (Exception $e) {
     error_log("Error getting recent songs: " . $e->getMessage());
+    error_log("Stack trace: " . $e->getTraceAsString());
     $recent_songs = [];
 }
 
@@ -2524,8 +2529,8 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
         ============================================== -->
 
         <!-- 1. Recently Uploaded Songs -->
-        <?php if (!empty($recent_songs)): ?>
         <div style="margin: 40px 0;">
+        <?php if (!empty($recent_songs)): ?>
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
                 <h2 style="font-size: 24px; font-weight: 700; color: #2c3e50; margin: 0; padding-bottom: 10px; border-bottom: 3px solid #2196F3;">Recently Uploaded Songs</h2>
                 <a href="songs.php" style="background: #2196F3; color: white; padding: 8px 20px; border-radius: 20px; text-decoration: none; font-weight: 600; font-size: 13px; transition: all 0.3s;" onmouseover="this.style.background='#1976D2';" onmouseout="this.style.background='#2196F3';">
@@ -2583,8 +2588,19 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                 </a>
                 <?php endforeach; ?>
             </div>
-        </div>
+        <?php else: ?>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+                <h2 style="font-size: 24px; font-weight: 700; color: #2c3e50; margin: 0; padding-bottom: 10px; border-bottom: 3px solid #2196F3;">Recently Uploaded Songs</h2>
+                <a href="songs.php" style="background: #2196F3; color: white; padding: 8px 20px; border-radius: 20px; text-decoration: none; font-weight: 600; font-size: 13px; transition: all 0.3s;" onmouseover="this.style.background='#1976D2';" onmouseout="this.style.background='#2196F3';">
+                    View All
+                </a>
+            </div>
+            <div style="text-align: center; padding: 40px; background: white; border-radius: 8px; color: #666;">
+                <i class="fas fa-music" style="font-size: 48px; color: #ddd; margin-bottom: 15px;"></i>
+                <p style="font-size: 16px; margin: 0;">No recently uploaded songs yet.</p>
+            </div>
         <?php endif; ?>
+        </div>
 
         <!-- 2. Political News -->
         <?php 

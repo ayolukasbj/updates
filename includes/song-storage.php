@@ -266,12 +266,14 @@ function getRecentSongs($limit = 6) {
         $conn = $db->getConnection();
         
         if (!$conn) {
+            error_log("getRecentSongs: Database connection failed");
             return [];
         }
         
         // Check if songs table exists
         $checkTable = $conn->query("SHOW TABLES LIKE 'songs'");
         if ($checkTable->rowCount() == 0) {
+            error_log("getRecentSongs: Songs table does not exist");
             return [];
         }
         
@@ -293,6 +295,8 @@ function getRecentSongs($limit = 6) {
         $stmt->execute([$limit]);
         $songs = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
+        error_log("getRecentSongs: Found " . count($songs) . " recent songs");
+        
         // Format songs
         foreach ($songs as &$song) {
             $song['id'] = (int)$song['id'];
@@ -306,14 +310,20 @@ function getRecentSongs($limit = 6) {
         return $songs;
     } catch (Exception $e) {
         error_log("Database error in getRecentSongs(): " . $e->getMessage());
+        error_log("Stack trace: " . $e->getTraceAsString());
         // Fallback to getSongs method
-        $songs = getSongs();
-        usort($songs, function($a, $b) {
-            $time_a = strtotime($b['uploaded_at'] ?? '1970-01-01');
-            $time_b = strtotime($a['uploaded_at'] ?? '1970-01-01');
-            return $time_a - $time_b;
-        });
-        return array_slice($songs, 0, $limit);
+        try {
+            $songs = getSongs();
+            usort($songs, function($a, $b) {
+                $time_a = strtotime($b['uploaded_at'] ?? '1970-01-01');
+                $time_b = strtotime($a['uploaded_at'] ?? '1970-01-01');
+                return $time_a - $time_b;
+            });
+            return array_slice($songs, 0, $limit);
+        } catch (Exception $e2) {
+            error_log("Fallback error in getRecentSongs(): " . $e2->getMessage());
+            return [];
+        }
     }
 }
 
