@@ -459,23 +459,51 @@ class PluginLoader {
             $stmt->execute([$plugin_file]);
             $plugin = $stmt->fetch(PDO::FETCH_ASSOC);
             
+            error_log("Plugin activation: Checking database for plugin_file: {$plugin_file}");
+            error_log("Plugin activation: Plugin found in database: " . ($plugin ? 'Yes' : 'No'));
+            
             if ($plugin) {
                 // Update status
+                error_log("Plugin activation: Updating existing plugin record");
                 $stmt = $conn->prepare("UPDATE plugins SET status = 'active', activated_at = NOW() WHERE plugin_file = ?");
                 $result = $stmt->execute([$plugin_file]);
                 if (!$result) {
                     $error_info = $stmt->errorInfo();
-                    error_log("Plugin activation error: Failed to update plugin status. SQL Error: " . ($error_info[2] ?? 'Unknown'));
-                    throw new Exception("Failed to update plugin status in database");
+                    error_log("Plugin activation error: Failed to update plugin status. SQL Error Code: " . ($error_info[0] ?? 'Unknown'));
+                    error_log("Plugin activation error: SQL Error Message: " . ($error_info[2] ?? 'Unknown'));
+                    throw new Exception("Failed to update plugin status in database: " . ($error_info[2] ?? 'Unknown SQL error'));
                 }
+                error_log("Plugin activation: Successfully updated plugin status");
             } else {
                 // Insert new plugin
-                $stmt = $conn->prepare("INSERT INTO plugins (plugin_file, status, activated_at) VALUES (?, 'active', NOW())");
-                $result = $stmt->execute([$plugin_file]);
-                if (!$result) {
-                    $error_info = $stmt->errorInfo();
-                    error_log("Plugin activation error: Failed to insert plugin. SQL Error: " . ($error_info[2] ?? 'Unknown'));
-                    throw new Exception("Failed to insert plugin into database");
+                error_log("Plugin activation: Inserting new plugin record");
+                try {
+                    $stmt = $conn->prepare("INSERT INTO plugins (plugin_file, status, activated_at) VALUES (?, 'active', NOW())");
+                    $result = $stmt->execute([$plugin_file]);
+                    
+                    if (!$result) {
+                        $error_info = $stmt->errorInfo();
+                        error_log("Plugin activation error: Failed to insert plugin. SQL Error Code: " . ($error_info[0] ?? 'Unknown'));
+                        error_log("Plugin activation error: SQL Error Message: " . ($error_info[2] ?? 'Unknown'));
+                        throw new Exception("Failed to insert plugin into database: " . ($error_info[2] ?? 'Unknown SQL error'));
+                    }
+                    
+                    $inserted_id = $conn->lastInsertId();
+                    error_log("Plugin activation: Successfully inserted plugin with ID: {$inserted_id}");
+                    
+                    // Verify the insert worked
+                    $verify_stmt = $conn->prepare("SELECT * FROM plugins WHERE plugin_file = ?");
+                    $verify_stmt->execute([$plugin_file]);
+                    $verified = $verify_stmt->fetch(PDO::FETCH_ASSOC);
+                    if (!$verified) {
+                        error_log("Plugin activation WARNING: Plugin was inserted but cannot be verified in database");
+                        throw new Exception("Plugin insert verification failed");
+                    }
+                    error_log("Plugin activation: Verified plugin exists in database after insert");
+                } catch (PDOException $e) {
+                    error_log("Plugin activation PDOException: " . $e->getMessage());
+                    error_log("Plugin activation PDOException Code: " . $e->getCode());
+                    throw new Exception("Database error inserting plugin: " . $e->getMessage());
                 }
             }
             
@@ -498,6 +526,18 @@ class PluginLoader {
                 error_log("Plugin activation hook fatal error: " . $e->getMessage());
                 // Continue even if hook fails
             }
+            
+            // Verify the plugin was saved before proceeding
+            $verify_stmt = $conn->prepare("SELECT * FROM plugins WHERE plugin_file = ? AND status = 'active'");
+            $verify_stmt->execute([$plugin_file]);
+            $verified_plugin = $verify_stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$verified_plugin) {
+                error_log("Plugin activation CRITICAL: Plugin was not found in database after insert/update");
+                throw new Exception("Plugin activation failed: Plugin was not saved to database");
+            }
+            
+            error_log("Plugin activation: Final verification passed - plugin is active in database");
             
             // Reload plugins (with error handling)
             try {

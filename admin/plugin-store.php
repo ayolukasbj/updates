@@ -352,16 +352,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                         $db = new Database();
                         $conn = $db->getConnection();
                         if ($conn) {
-                            $check_stmt = $conn->prepare("SELECT * FROM plugins WHERE plugin_file = ?");
-                            $check_stmt->execute([$plugin_file_normalized]);
-                            $saved_plugin = $check_stmt->fetch(PDO::FETCH_ASSOC);
+                            // Try multiple variations of the plugin file path
+                            $paths_to_check = [
+                                $plugin_file_normalized,
+                                str_replace('plugins/', '', $plugin_file_normalized),
+                                basename(dirname($plugin_file_normalized)) . '/' . basename($plugin_file_normalized),
+                                'plugins/' . basename(dirname($plugin_file_normalized)) . '/' . basename($plugin_file_normalized)
+                            ];
+                            
+                            $saved_plugin = null;
+                            foreach ($paths_to_check as $check_path) {
+                                $check_stmt = $conn->prepare("SELECT * FROM plugins WHERE plugin_file = ?");
+                                $check_stmt->execute([$check_path]);
+                                $saved_plugin = $check_stmt->fetch(PDO::FETCH_ASSOC);
+                                if ($saved_plugin) {
+                                    error_log("Found plugin in database with path: {$check_path}");
+                                    break;
+                                }
+                            }
                             
                             if ($saved_plugin) {
                                 $error_msg .= ' Plugin was saved to database but activation returned false.';
                                 $error_msg .= ' Plugin status: ' . ($saved_plugin['status'] ?? 'unknown');
+                                $error_msg .= ' Plugin file in DB: ' . ($saved_plugin['plugin_file'] ?? 'unknown');
                             } else {
                                 $error_msg .= ' Plugin was not saved to database.';
+                                $error_msg .= ' Checked paths: ' . implode(', ', $paths_to_check);
+                                
+                                // Check if plugins table exists
+                                $table_check = $conn->query("SHOW TABLES LIKE 'plugins'");
+                                if ($table_check->rowCount() == 0) {
+                                    $error_msg .= ' (Plugins table does not exist)';
+                                } else {
+                                    $error_msg .= ' (Plugins table exists but plugin not found)';
+                                }
                             }
+                        } else {
+                            $error_msg .= ' Database connection failed during verification.';
                         }
                     } catch (Exception $e) {
                         $error_msg .= ' Could not verify database status: ' . $e->getMessage();
