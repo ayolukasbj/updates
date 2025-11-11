@@ -2803,8 +2803,11 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                             $songSlug = $songTitleSlug . '-by-' . $songArtistSlug;
                             $songUrl = base_url('song/' . $songSlug);
                         ?>
-                        <a href="<?php echo $songUrl; ?>" style="display: flex; gap: 12px; padding: 12px; border-bottom: <?php echo $index < count($most_played_songs) - 1 ? '1px solid #f0f0f0' : 'none'; ?>; text-decoration: none; color: inherit; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa';" onmouseout="this.style.background='transparent';">
-                            <div style="width: 50px; height: 50px; flex-shrink: 0; border-radius: 4px; overflow: hidden;">
+                        <a href="<?php echo $songUrl; ?>" style="display: flex; gap: 12px; padding: 12px; border-bottom: <?php echo $index < count($most_played_songs) - 1 ? '1px solid #f0f0f0' : 'none'; ?>; text-decoration: none; color: inherit; transition: background 0.2s; position: relative;" onmouseover="this.style.background='#f8f9fa';" onmouseout="this.style.background='transparent';">
+                            <div style="width: 30px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; color: #2196F3;">
+                                <?php echo $index + 1; ?>
+                            </div>
+                            <div style="width: 50px; height: 50px; flex-shrink: 0; border-radius: 4px; overflow: hidden; position: relative;">
                                 <?php 
                                 // Get artist avatar as cover art
                                 $song_cover_art = $song['cover_art'] ?? '';
@@ -2907,8 +2910,11 @@ $meta_description = !empty($site_description) ? $site_description : (!empty($sit
                             $newSongSlug = $newTitleSlug . '-by-' . $newArtistSlug;
                             $newSongUrl = base_url('song/' . $newSongSlug);
                         ?>
-                        <a href="<?php echo $newSongUrl; ?>" style="display: flex; gap: 12px; padding: 12px; border-bottom: <?php echo $index < min(4, count($featured_songs) - 1) ? '1px solid #f0f0f0' : 'none'; ?>; text-decoration: none; color: inherit; transition: background 0.2s;" onmouseover="this.style.background='#f8f9fa';" onmouseout="this.style.background='transparent';">
-                            <div style="width: 50px; height: 50px; flex-shrink: 0; border-radius: 4px; overflow: hidden;">
+                        <a href="<?php echo $newSongUrl; ?>" style="display: flex; gap: 12px; padding: 12px; border-bottom: <?php echo $index < min(4, count($featured_songs) - 1) ? '1px solid #f0f0f0' : 'none'; ?>; text-decoration: none; color: inherit; transition: background 0.2s; position: relative;" onmouseover="this.style.background='#f8f9fa';" onmouseout="this.style.background='transparent';">
+                            <div style="width: 30px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; color: #9C27B0;">
+                                <?php echo $index + 1; ?>
+                            </div>
+                            <div style="width: 50px; height: 50px; flex-shrink: 0; border-radius: 4px; overflow: hidden; position: relative;">
                                 <?php 
                                 // Get artist avatar as cover art
                                 $song_cover_art = $newSong['cover_art'] ?? '';

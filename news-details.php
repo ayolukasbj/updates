@@ -767,38 +767,39 @@ $share_description = !empty($news_item['share_excerpt'])
         ? htmlspecialchars(strip_tags($news_item['excerpt'])) 
         : htmlspecialchars(substr(strip_tags($news_item['content'] ?? ''), 0, 200)));
 
-// Get share image - use EXACT same logic as featured image display on page (lines 2162-2196)
-// First, get the featured_image exactly as the page does
-$featured_image_for_share = '';
+// Get share image - Calculate featured_image EXACTLY as displayed on page (lines 2181-2215)
+// This MUST use the same logic and variable as the page display
+$featured_image = '';
 
-// Use image field directly (same as homepage slider and page display)
-if (!empty($news_item['image']) && trim($news_item['image']) !== '') {
-    $featured_image_for_share = trim($news_item['image']);
+// Priority: featured_image field first (as user requested), then image, then display_image
+if (!empty($news_item['featured_image']) && trim($news_item['featured_image']) !== '') {
+    $featured_image = trim($news_item['featured_image']);
 } 
-// Fallback to featured_image if image is empty
-elseif (!empty($news_item['featured_image']) && trim($news_item['featured_image']) !== '') {
-    $featured_image_for_share = trim($news_item['featured_image']);
+// Fallback to image field
+elseif (!empty($news_item['image']) && trim($news_item['image']) !== '') {
+    $featured_image = trim($news_item['image']);
 } 
 // Fallback to display_image
 elseif (!empty($news_item['display_image']) && trim($news_item['display_image']) !== '') {
-    $featured_image_for_share = trim($news_item['display_image']);
+    $featured_image = trim($news_item['display_image']);
 }
 
-// If still empty, query database directly (same as page does)
-if (empty($featured_image_for_share) && !empty($news_item['id'])) {
+// If still empty, query database directly - check featured_image field first
+if (empty($featured_image) && !empty($news_item['id'])) {
     try {
-        $imgStmt = $conn->prepare("SELECT image, featured_image FROM news WHERE id = ?");
+        $imgStmt = $conn->prepare("SELECT featured_image, image FROM news WHERE id = ?");
         $imgStmt->execute([$news_item['id']]);
         $imgData = $imgStmt->fetch(PDO::FETCH_ASSOC);
         if ($imgData) {
-            if (!empty($imgData['image']) && trim($imgData['image']) !== '') {
-                $featured_image_for_share = trim($imgData['image']);
-            } elseif (!empty($imgData['featured_image']) && trim($imgData['featured_image']) !== '') {
-                $featured_image_for_share = trim($imgData['featured_image']);
+            // Prioritize featured_image field from database
+            if (!empty($imgData['featured_image']) && trim($imgData['featured_image']) !== '') {
+                $featured_image = trim($imgData['featured_image']);
+            } elseif (!empty($imgData['image']) && trim($imgData['image']) !== '') {
+                $featured_image = trim($imgData['image']);
             }
         }
     } catch (Exception $e) {
-        error_log("Error fetching image from DB: " . $e->getMessage());
+        error_log("Error fetching image from DB for share: " . $e->getMessage());
     }
 }
 
@@ -810,14 +811,14 @@ if (empty($site_url)) {
     $site_url = $protocol . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 }
 
-if (!empty($featured_image_for_share)) {
+if (!empty($featured_image)) {
     // If already absolute, use as is
-    if (strpos($featured_image_for_share, 'http://') === 0 || strpos($featured_image_for_share, 'https://') === 0) {
-        $share_image = $featured_image_for_share;
+    if (strpos($featured_image, 'http://') === 0 || strpos($featured_image, 'https://') === 0) {
+        $share_image = $featured_image;
     } else {
         // Make absolute URL (same as page uses - no asset_path conversion)
-        $featured_image_for_share = ltrim($featured_image_for_share, '/');
-        $share_image = $site_url . '/' . $featured_image_for_share;
+        $featured_image_clean = ltrim($featured_image, '/');
+        $share_image = $site_url . '/' . $featured_image_clean;
     }
     // Ensure HTTPS for WhatsApp compatibility
     $share_image = str_replace('http://', 'https://', $share_image);
@@ -826,7 +827,7 @@ if (!empty($featured_image_for_share)) {
     $share_image = str_replace('http://', 'https://', $share_image);
 }
 
-error_log("News share image - Using EXACT same logic as page display. Image: " . $featured_image_for_share . ", Final URL: " . $share_image);
+error_log("News share image - Featured Image: " . ($news_item['featured_image'] ?? 'N/A') . ", Image: " . ($news_item['image'] ?? 'N/A') . ", Display Image: " . ($news_item['display_image'] ?? 'N/A') . ", Final Featured: " . $featured_image . ", Share URL: " . $share_image);
 
 // Calculate share count (using views as proxy)
 $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% share rate
@@ -2165,38 +2166,37 @@ $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% shar
 
                 <!-- Featured Image -->
                 <?php 
-                // Get featured image - use same logic as homepage slider (direct image field)
-                // Homepage slider uses: $carousel_news['image'] directly
-                $featured_image = '';
-                
-                // Use image field directly (same as homepage slider)
-                if (!empty($news_item['image']) && trim($news_item['image']) !== '') {
-                    $featured_image = trim($news_item['image']);
-                } 
-                // Fallback to featured_image if image is empty
-                elseif (!empty($news_item['featured_image']) && trim($news_item['featured_image']) !== '') {
-                    $featured_image = trim($news_item['featured_image']);
-                } 
-                // Fallback to display_image
-                elseif (!empty($news_item['display_image']) && trim($news_item['display_image']) !== '') {
-                    $featured_image = trim($news_item['display_image']);
-                }
-                
-                // If still empty, query database directly (same as homepage does)
+                // Use the same $featured_image variable calculated earlier for sharing
+                // This ensures the displayed image matches the shared image exactly
+                // If $featured_image was not set earlier (shouldn't happen), recalculate
                 if (empty($featured_image)) {
-                    try {
-                        $imgStmt = $conn->prepare("SELECT image, featured_image FROM news WHERE id = ?");
-                        $imgStmt->execute([$news_item['id']]);
-                        $imgData = $imgStmt->fetch(PDO::FETCH_ASSOC);
-                        if ($imgData) {
-                            if (!empty($imgData['image']) && trim($imgData['image']) !== '') {
-                                $featured_image = trim($imgData['image']);
-                            } elseif (!empty($imgData['featured_image']) && trim($imgData['featured_image']) !== '') {
-                                $featured_image = trim($imgData['featured_image']);
+                    // Priority: featured_image field first, then image, then display_image
+                    if (!empty($news_item['featured_image']) && trim($news_item['featured_image']) !== '') {
+                        $featured_image = trim($news_item['featured_image']);
+                    } 
+                    elseif (!empty($news_item['image']) && trim($news_item['image']) !== '') {
+                        $featured_image = trim($news_item['image']);
+                    } 
+                    elseif (!empty($news_item['display_image']) && trim($news_item['display_image']) !== '') {
+                        $featured_image = trim($news_item['display_image']);
+                    }
+                    
+                    // If still empty, query database directly
+                    if (empty($featured_image) && !empty($news_item['id'])) {
+                        try {
+                            $imgStmt = $conn->prepare("SELECT featured_image, image FROM news WHERE id = ?");
+                            $imgStmt->execute([$news_item['id']]);
+                            $imgData = $imgStmt->fetch(PDO::FETCH_ASSOC);
+                            if ($imgData) {
+                                if (!empty($imgData['featured_image']) && trim($imgData['featured_image']) !== '') {
+                                    $featured_image = trim($imgData['featured_image']);
+                                } elseif (!empty($imgData['image']) && trim($imgData['image']) !== '') {
+                                    $featured_image = trim($imgData['image']);
+                                }
                             }
+                        } catch (Exception $e) {
+                            error_log("Error fetching image from DB: " . $e->getMessage());
                         }
-                    } catch (Exception $e) {
-                        error_log("Error fetching image from DB: " . $e->getMessage());
                     }
                 }
                 
