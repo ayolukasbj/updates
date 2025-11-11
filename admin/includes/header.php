@@ -1,3 +1,10 @@
+<?php
+// Prevent double includes
+if (defined('ADMIN_HEADER_INCLUDED')) {
+    return;
+}
+define('ADMIN_HEADER_INCLUDED', true);
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -162,9 +169,33 @@
                     <i class="fas fa-edit"></i>
                     <span>Song Editor</span>
                 </a>
-                <a href="mp3-tagger.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'mp3-tagger.php' ? 'active' : ''; ?>">
-                    <i class="fas fa-tag"></i>
-                    <span>MP3 Tagger</span>
+                <?php 
+                // Check if MP3 Tagger plugin is active
+                $mp3_tagger_active = false;
+                if (class_exists('PluginLoader')) {
+                    $active_plugins = PluginLoader::getActivePlugins();
+                    foreach ($active_plugins as $plugin_file) {
+                        if (strpos($plugin_file, 'mp3-tagger') !== false) {
+                            $mp3_tagger_active = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // Show MP3 Tagger menu only if plugin is active
+                if ($mp3_tagger_active): ?>
+                    <a href="mp3-tagger.php?tab=settings" class="nav-item <?php echo (basename($_SERVER['PHP_SELF']) == 'mp3-tagger.php' || strpos($_SERVER['PHP_SELF'], 'mp3-tagger') !== false) ? 'active' : ''; ?>">
+                        <i class="fas fa-tag"></i>
+                        <span>MP3 Tagger</span>
+                    </a>
+                <?php endif; ?>
+                <a href="plugins.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'plugins.php' ? 'active' : ''; ?>">
+                    <i class="fas fa-puzzle-piece"></i>
+                    <span>Plugins</span>
+                </a>
+                <a href="plugin-store.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'plugin-store.php' ? 'active' : ''; ?>">
+                    <i class="fas fa-store"></i>
+                    <span>Plugin Store</span>
                 </a>
                 <a href="genres-tags.php" class="nav-item <?php echo basename($_SERVER['PHP_SELF']) == 'genres-tags.php' ? 'active' : ''; ?>">
                     <i class="fas fa-tags"></i>
