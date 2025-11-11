@@ -390,42 +390,105 @@ class PluginLoader {
      */
     public static function activatePlugin($plugin_file) {
         try {
+            // Validate plugin file path
+            if (empty($plugin_file)) {
+                error_log("Plugin activation error: Empty plugin file path");
+                return false;
+            }
+            
+            // Normalize plugin file path
+            $plugin_file = str_replace('\\', '/', $plugin_file);
+            
+            // Check if plugin file exists
+            $full_path = __DIR__ . '/../' . ltrim($plugin_file, '/');
+            if (!file_exists($full_path)) {
+                // Try alternative path
+                $alt_path = __DIR__ . '/../plugins/' . basename(dirname($plugin_file)) . '/' . basename($plugin_file);
+                if (file_exists($alt_path)) {
+                    $plugin_file = 'plugins/' . basename(dirname($plugin_file)) . '/' . basename($plugin_file);
+                } else {
+                    error_log("Plugin activation error: Plugin file not found: {$plugin_file}");
+                    return false;
+                }
+            }
+            
             require_once __DIR__ . '/../config/database.php';
             $db = new Database();
             $conn = $db->getConnection();
             
-            if ($conn) {
-                // Create plugins table if it doesn't exist
+            if (!$conn) {
+                error_log("Plugin activation error: Database connection failed");
+                return false;
+            }
+            
+            // Create plugins table if it doesn't exist
+            try {
                 self::createPluginsTable($conn);
-                
-                // Check if plugin exists
-                $stmt = $conn->prepare("SELECT * FROM plugins WHERE plugin_file = ?");
+            } catch (Exception $e) {
+                error_log("Plugin activation warning: Could not create plugins table: " . $e->getMessage());
+            }
+            
+            // Check if plugin exists
+            $stmt = $conn->prepare("SELECT * FROM plugins WHERE plugin_file = ?");
+            $stmt->execute([$plugin_file]);
+            $plugin = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if ($plugin) {
+                // Update status
+                $stmt = $conn->prepare("UPDATE plugins SET status = 'active', activated_at = NOW() WHERE plugin_file = ?");
                 $stmt->execute([$plugin_file]);
-                $plugin = $stmt->fetch(PDO::FETCH_ASSOC);
-                
-                if ($plugin) {
-                    // Update status
-                    $stmt = $conn->prepare("UPDATE plugins SET status = 'active', activated_at = NOW() WHERE plugin_file = ?");
-                    $stmt->execute([$plugin_file]);
+            } else {
+                // Insert new plugin
+                $stmt = $conn->prepare("INSERT INTO plugins (plugin_file, status, activated_at) VALUES (?, 'active', NOW())");
+                $stmt->execute([$plugin_file]);
+            }
+            
+            // Fire activation hook before reloading
+            try {
+                // Get plugin basename (similar to plugin-api.php function)
+                if (function_exists('plugin_basename')) {
+                    $plugin_basename = plugin_basename($full_path);
                 } else {
-                    // Insert new plugin
-                    $stmt = $conn->prepare("INSERT INTO plugins (plugin_file, status, activated_at) VALUES (?, 'active', NOW())");
-                    $stmt->execute([$plugin_file]);
+                    // Fallback: extract plugin basename manually
+                    $plugins_dir = str_replace('\\', '/', __DIR__ . '/../plugins');
+                    $plugin_path = str_replace('\\', '/', $full_path);
+                    $plugin_basename = str_replace($plugins_dir . '/', '', $plugin_path);
                 }
-                
-                // Reload plugins
+                self::doAction('plugin_activated_' . $plugin_basename);
+            } catch (Exception $e) {
+                error_log("Plugin activation hook error: " . $e->getMessage());
+                // Continue even if hook fails
+            } catch (Error $e) {
+                error_log("Plugin activation hook fatal error: " . $e->getMessage());
+                // Continue even if hook fails
+            }
+            
+            // Reload plugins (with error handling)
+            try {
                 self::$active_plugins = [];
                 self::loadActivePlugins();
-                self::activatePlugins();
-                
-                return true;
+                // Only activate plugins if we have active plugins loaded
+                if (!empty(self::$active_plugins)) {
+                    self::activatePlugins();
+                }
+            } catch (Exception $e) {
+                error_log("Plugin reload error after activation: " . $e->getMessage());
+                // Still return true if database update succeeded
             }
+            
+            return true;
+        } catch (PDOException $e) {
+            error_log("Plugin activation database error: " . $e->getMessage());
+            return false;
         } catch (Exception $e) {
-            error_log("Error activating plugin: " . $e->getMessage());
+            error_log("Plugin activation error: " . $e->getMessage());
+            error_log("Stack trace: " . $e->getTraceAsString());
+            return false;
+        } catch (Error $e) {
+            error_log("Plugin activation fatal error: " . $e->getMessage());
+            error_log("File: " . $e->getFile() . " Line: " . $e->getLine());
             return false;
         }
-        
-        return false;
     }
     
     /**

@@ -36,27 +36,41 @@ $error = '';
 
 // Handle plugin actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
-    $plugin_file = $_POST['plugin_file'] ?? '';
-    
-    if ($action === 'activate') {
-        if (PluginLoader::activatePlugin($plugin_file)) {
-            $success = 'Plugin activated successfully!';
+    try {
+        $action = $_POST['action'] ?? '';
+        $plugin_file = $_POST['plugin_file'] ?? '';
+        
+        if (empty($action) || empty($plugin_file)) {
+            $error = 'Invalid request. Missing action or plugin file.';
+        } elseif ($action === 'activate') {
+            if (PluginLoader::activatePlugin($plugin_file)) {
+                $success = 'Plugin activated successfully!';
+            } else {
+                $error = 'Failed to activate plugin. Please check the error logs for details.';
+            }
+        } elseif ($action === 'deactivate') {
+            if (PluginLoader::deactivatePlugin($plugin_file)) {
+                $success = 'Plugin deactivated successfully!';
+            } else {
+                $error = 'Failed to deactivate plugin. Please check the error logs for details.';
+            }
+        } elseif ($action === 'delete') {
+            if (PluginLoader::deletePlugin($plugin_file)) {
+                $success = 'Plugin deleted successfully!';
+            } else {
+                $error = 'Failed to delete plugin. Please check the error logs for details.';
+            }
         } else {
-            $error = 'Failed to activate plugin.';
+            $error = 'Invalid action specified.';
         }
-    } elseif ($action === 'deactivate') {
-        if (PluginLoader::deactivatePlugin($plugin_file)) {
-            $success = 'Plugin deactivated successfully!';
-        } else {
-            $error = 'Failed to deactivate plugin.';
-        }
-    } elseif ($action === 'delete') {
-        if (PluginLoader::deletePlugin($plugin_file)) {
-            $success = 'Plugin deleted successfully!';
-        } else {
-            $error = 'Failed to delete plugin.';
-        }
+    } catch (Exception $e) {
+        error_log("Plugin action error: " . $e->getMessage());
+        error_log("Stack trace: " . $e->getTraceAsString());
+        $error = 'An error occurred while processing your request: ' . htmlspecialchars($e->getMessage());
+    } catch (Error $e) {
+        error_log("Plugin action fatal error: " . $e->getMessage());
+        error_log("File: " . $e->getFile() . " Line: " . $e->getLine());
+        $error = 'A fatal error occurred. Please check the error logs for details.';
     }
 }
 

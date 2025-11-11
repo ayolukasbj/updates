@@ -579,7 +579,7 @@ try {
                         LEFT JOIN users u ON s.uploaded_by = u.id
                         WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
                         AND DATE(COALESCE(s.upload_date, s.created_at, s.uploaded_at)) = CURDATE()
-                        ORDER BY s.plays DESC, s.downloads DESC, s.id DESC
+                        ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
                         LIMIT 5
                     ");
                     $popular_today = $popularTodayStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -602,7 +602,7 @@ try {
                         LEFT JOIN users u ON s.uploaded_by = u.id
                         WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
                         AND COALESCE(s.upload_date, s.created_at, s.uploaded_at) >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-                        ORDER BY s.plays DESC, s.downloads DESC, s.id DESC
+                        ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
                         LIMIT 5
                     ");
                     $popular_week = $popularWeekStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -625,7 +625,7 @@ try {
                         LEFT JOIN users u ON s.uploaded_by = u.id
                         WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
                         AND COALESCE(s.upload_date, s.created_at, s.uploaded_at) >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-                        ORDER BY s.plays DESC, s.downloads DESC, s.id DESC
+                        ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
                         LIMIT 5
                     ");
                     $popular_month = $popularMonthStmt->fetchAll(PDO::FETCH_ASSOC);
