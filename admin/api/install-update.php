@@ -27,10 +27,8 @@ set_time_limit(300); // 5 minutes max
 ini_set('max_execution_time', 300);
 ini_set('memory_limit', '512M');
 
-// Disable output buffering for long operations
-if (ob_get_level() > 0) {
-    ob_end_clean();
-}
+// Restart output buffering to catch any errors
+ob_start();
 
 $action = $_GET['action'] ?? '';
 $input = json_decode(file_get_contents('php://input'), true);
@@ -604,8 +602,15 @@ function installFiles($extract_path, $root_path) {
             $copied++;
             
             // Automatically sync installed file to updates folder
+            // Suppress errors as sync is not critical for installation
             if (function_exists('syncFileToUpdates')) {
-                @syncFileToUpdates($target_path);
+                try {
+                    @syncFileToUpdates($target_path);
+                } catch (Exception $e) {
+                    // Silently ignore sync errors
+                } catch (Error $e) {
+                    // Silently ignore sync errors
+                }
             }
             
             if ($copied % 10 === 0) {
@@ -846,6 +851,13 @@ try {
             // Ensure clean output buffer before starting
             ob_clean();
             
+            // Set error handler to catch any PHP errors/warnings
+            $error_handler = function($errno, $errstr, $errfile, $errline) {
+                logMessage("PHP Error [$errno]: $errstr in $errfile:$errline");
+                return true; // Don't execute PHP internal error handler
+            };
+            set_error_handler($error_handler);
+            
             try {
                 $version = $input['version'] ?? '';
                 $extract_path = $_SESSION['update_extract_path'] ?? '';
@@ -863,34 +875,64 @@ try {
                 $result = installFiles($extract_path, $root_path);
                 
                 // After installation, sync all installed files to updates folder
+                // Suppress any errors from sync as it's not critical
                 logMessage("Syncing installed files to updates folder...");
                 try {
-                    $sync_result = syncAllFilesToUpdates();
-                    logMessage("Sync complete: " . ($sync_result['copied'] ?? 0) . " files synced");
+                    // Suppress warnings/errors from sync function
+                    $old_error_reporting = error_reporting(E_ERROR | E_PARSE | E_CORE_ERROR | E_COMPILE_ERROR | E_USER_ERROR | E_RECOVERABLE_ERROR);
+                    $sync_result = @syncAllFilesToUpdates();
+                    error_reporting($old_error_reporting);
+                    if ($sync_result) {
+                        logMessage("Sync complete: " . ($sync_result['copied'] ?? 0) . " files synced");
+                    }
                 } catch (Exception $e) {
                     logMessage("Sync warning: " . $e->getMessage());
+                    // Don't fail installation if sync fails
+                } catch (Error $e) {
+                    logMessage("Sync error: " . $e->getMessage());
                     // Don't fail installation if sync fails
                 }
                 
                 // Clean any output before sending JSON
                 ob_clean();
+                
+                // Restore error handler
+                restore_error_handler();
+                
                 echo json_encode($result);
             } catch (Exception $e) {
                 ob_clean();
+                restore_error_handler();
                 http_response_code(500);
                 echo json_encode([
                     'success' => false,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
                 ]);
-                logMessage("Install error: " . $e->getMessage());
+                logMessage("Install error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
             } catch (Error $e) {
                 ob_clean();
+                restore_error_handler();
                 http_response_code(500);
                 echo json_encode([
                     'success' => false,
-                    'error' => $e->getMessage()
+                    'error' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
                 ]);
-                logMessage("Install fatal error: " . $e->getMessage());
+                logMessage("Install fatal error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+            } catch (Throwable $e) {
+                ob_clean();
+                restore_error_handler();
+                http_response_code(500);
+                echo json_encode([
+                    'success' => false,
+                    'error' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine()
+                ]);
+                logMessage("Install throwable error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
             }
             break;
             
