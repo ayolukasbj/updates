@@ -107,12 +107,6 @@ function createBackup($backup_dir) {
         throw new Exception('Cannot create backup file: ' . $temp_backup_path);
     }
     
-    // Pre-build exclusion patterns for faster checking
-    $exclude_patterns = [];
-    foreach ($exclude as $excluded) {
-        $exclude_patterns[] = '/' . preg_quote($excluded, '/') . '/';
-    }
-    
     // Use optimized iterator with flags to skip . and ..
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($root_path, RecursiveDirectoryIterator::SKIP_DOTS),
@@ -786,7 +780,16 @@ try {
                 echo json_encode($result);
             } catch (Exception $e) {
                 logMessage("Backup error: " . $e->getMessage());
-                // Return error but don't fail completely
+                // Return error but don't fail completely - return 200 with success=false
+                // so frontend can handle it gracefully
+                echo json_encode([
+                    'success' => false,
+                    'error' => $e->getMessage(),
+                    'warning' => 'Backup failed but you can continue without backup (not recommended)'
+                ]);
+            } catch (Error $e) {
+                // Catch fatal errors (PHP 7+)
+                logMessage("Backup fatal error: " . $e->getMessage());
                 echo json_encode([
                     'success' => false,
                     'error' => $e->getMessage(),
@@ -814,45 +817,81 @@ try {
             break;
             
         case 'extract':
-            $version = $input['version'] ?? '';
-            $zip_path = $_SESSION['update_zip_path'] ?? '';
-            
-            if (empty($zip_path) || !file_exists($zip_path)) {
-                throw new Exception('Update ZIP file not found');
+            ob_clean();
+            try {
+                $version = $input['version'] ?? '';
+                $zip_path = $_SESSION['update_zip_path'] ?? '';
+                
+                if (empty($zip_path) || !file_exists($zip_path)) {
+                    throw new Exception('Update ZIP file not found');
+                }
+                
+                $result = extractUpdate($zip_path, $temp_dir, $version);
+                $_SESSION['update_extract_path'] = $result['extract_path'];
+                
+                ob_clean();
+                echo json_encode($result);
+            } catch (Exception $e) {
+                ob_clean();
+                http_response_code(500);
+                echo json_encode([
+                    'success' => false,
+                    'error' => $e->getMessage()
+                ]);
+                logMessage("Extract error: " . $e->getMessage());
             }
-            
-            $result = extractUpdate($zip_path, $temp_dir, $version);
-            $_SESSION['update_extract_path'] = $result['extract_path'];
-            echo json_encode($result);
             break;
             
         case 'install':
-            $version = $input['version'] ?? '';
-            $extract_path = $_SESSION['update_extract_path'] ?? '';
-            $root_path = realpath(__DIR__ . '/../../');
+            // Ensure clean output buffer before starting
+            ob_clean();
             
-            if (empty($extract_path) || !is_dir($extract_path)) {
-                throw new Exception('Extracted files not found');
-            }
-            
-            // Load file sync utility if not already loaded
-            if (!function_exists('syncFileToUpdates')) {
-                require_once __DIR__ . '/../../includes/file-sync.php';
-            }
-            
-            $result = installFiles($extract_path, $root_path);
-            
-            // After installation, sync all installed files to updates folder
-            logMessage("Syncing installed files to updates folder...");
             try {
-                $sync_result = syncAllFilesToUpdates();
-                logMessage("Sync complete: " . ($sync_result['copied'] ?? 0) . " files synced");
+                $version = $input['version'] ?? '';
+                $extract_path = $_SESSION['update_extract_path'] ?? '';
+                $root_path = realpath(__DIR__ . '/../../');
+                
+                if (empty($extract_path) || !is_dir($extract_path)) {
+                    throw new Exception('Extracted files not found');
+                }
+                
+                // Load file sync utility if not already loaded
+                if (!function_exists('syncFileToUpdates')) {
+                    require_once __DIR__ . '/../../includes/file-sync.php';
+                }
+                
+                $result = installFiles($extract_path, $root_path);
+                
+                // After installation, sync all installed files to updates folder
+                logMessage("Syncing installed files to updates folder...");
+                try {
+                    $sync_result = syncAllFilesToUpdates();
+                    logMessage("Sync complete: " . ($sync_result['copied'] ?? 0) . " files synced");
+                } catch (Exception $e) {
+                    logMessage("Sync warning: " . $e->getMessage());
+                    // Don't fail installation if sync fails
+                }
+                
+                // Clean any output before sending JSON
+                ob_clean();
+                echo json_encode($result);
             } catch (Exception $e) {
-                logMessage("Sync warning: " . $e->getMessage());
-                // Don't fail installation if sync fails
+                ob_clean();
+                http_response_code(500);
+                echo json_encode([
+                    'success' => false,
+                    'error' => $e->getMessage()
+                ]);
+                logMessage("Install error: " . $e->getMessage());
+            } catch (Error $e) {
+                ob_clean();
+                http_response_code(500);
+                echo json_encode([
+                    'success' => false,
+                    'error' => $e->getMessage()
+                ]);
+                logMessage("Install fatal error: " . $e->getMessage());
             }
-            
-            echo json_encode($result);
             break;
             
         case 'finalize':

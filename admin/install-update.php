@@ -307,7 +307,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
             });
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok: ' + response.status);
+            }
+            return response.text().then(text => {
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    throw new Error('Invalid JSON response: ' + text.substring(0, 200));
+                }
+            });
+        })
         .then(data => {
             if (!data.success) {
                 throw new Error(data.error || 'Extraction failed');
@@ -325,7 +336,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 })
             });
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok: ' + response.status);
+            }
+            return response.text().then(text => {
+                try {
+                    return JSON.parse(text);
+                } catch (e) {
+                    throw new Error('Invalid JSON response: ' + text.substring(0, 200));
+                }
+            });
+        })
         .then(data => {
             if (!data.success) {
                 throw new Error(data.error || 'Installation failed');
