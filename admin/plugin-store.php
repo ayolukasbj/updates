@@ -230,12 +230,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
             }
             
             if (file_exists($plugin_file) && class_exists('PluginLoader')) {
-                PluginLoader::activatePlugin($plugin_file);
+                // Normalize plugin file path (use relative path from plugins directory)
+                $plugins_base = realpath(__DIR__ . '/../plugins/');
+                $plugin_file_normalized = $plugin_file;
+                
+                // Convert to relative path if absolute
+                if (strpos($plugin_file, $plugins_base) === 0) {
+                    $plugin_file_normalized = str_replace($plugins_base . DIRECTORY_SEPARATOR, '', $plugin_file);
+                    $plugin_file_normalized = str_replace('\\', '/', $plugin_file_normalized);
+                    $plugin_file_normalized = 'plugins/' . $plugin_file_normalized;
+                }
+                
+                // Activate the plugin (this saves it to database)
+                if (PluginLoader::activatePlugin($plugin_file_normalized)) {
+                    // Force reload plugins to detect the newly installed one
+                    PluginLoader::init(true); // Force reload
+                    $success = 'Plugin "' . htmlspecialchars($plugin_name) . '" installed and activated successfully!';
+                } else {
+                    throw new Exception('Failed to activate plugin. Please try activating it manually from the Plugins page.');
+                }
             } else {
-                throw new Exception('Plugin file not found after extraction');
+                throw new Exception('Plugin file not found after extraction: ' . $plugin_file);
             }
-            
-            $success = 'Plugin "' . htmlspecialchars($plugin_name) . '" installed and activated successfully!';
         } else {
             throw new Exception('Failed to extract plugin ZIP file');
         }
@@ -270,18 +286,23 @@ $installed_plugins = [];
 
 try {
     if (class_exists('PluginLoader')) {
-        // Re-initialize to ensure plugins are loaded
-        PluginLoader::init();
+        // Force re-initialize to ensure plugins are loaded (especially after installation)
+        PluginLoader::init(true); // Force reload
         
         $all_plugins = PluginLoader::getPlugins();
         $active_plugins = PluginLoader::getActivePlugins();
         
         foreach ($all_plugins as $plugin_slug => $plugin) {
+            // Normalize plugin file path for comparison
+            $plugin_file = $plugin['file'] ?? '';
+            $plugin_file_normalized = str_replace('\\', '/', $plugin_file);
+            
             // Use folder name as key (plugin slug)
             $installed_plugins[$plugin_slug] = [
                 'name' => $plugin['data']['Name'] ?? $plugin_slug,
-                'active' => in_array($plugin['file'], $active_plugins),
-                'file' => $plugin['file']
+                'active' => in_array($plugin_file, $active_plugins) || in_array($plugin_file_normalized, $active_plugins),
+                'file' => $plugin_file,
+                'file_normalized' => $plugin_file_normalized
             ];
         }
     }

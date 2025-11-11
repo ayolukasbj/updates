@@ -32,13 +32,21 @@ class PluginLoader {
     
     /**
      * Initialize plugin system
+     * @param bool $force_reload Force reload even if already loaded
      */
-    public static function init() {
-        if (self::$loaded) {
+    public static function init($force_reload = false) {
+        if (self::$loaded && !$force_reload) {
             return;
         }
         
         try {
+            // Reset if forcing reload
+            if ($force_reload) {
+                self::$plugins = [];
+                self::$active_plugins = [];
+                self::$loaded = false;
+            }
+            
             // Load active plugins from database
             self::loadActivePlugins();
             

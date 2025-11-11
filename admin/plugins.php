@@ -66,6 +66,9 @@ $active_plugins = [];
 
 try {
     if (class_exists('PluginLoader')) {
+        // Force re-initialize to ensure all plugins are detected
+        PluginLoader::init(true); // Force reload
+        
         $all_plugins = PluginLoader::getPlugins();
         $active_plugins = PluginLoader::getActivePlugins();
     }
