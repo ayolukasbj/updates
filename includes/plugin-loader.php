@@ -414,6 +414,7 @@ class PluginLoader {
             
             // Normalize plugin file path
             $plugin_file = str_replace('\\', '/', $plugin_file);
+            $original_plugin_file = $plugin_file;
             
             // Check if plugin file exists
             $full_path = __DIR__ . '/../' . ltrim($plugin_file, '/');
@@ -422,11 +423,15 @@ class PluginLoader {
                 $alt_path = __DIR__ . '/../plugins/' . basename(dirname($plugin_file)) . '/' . basename($plugin_file);
                 if (file_exists($alt_path)) {
                     $plugin_file = 'plugins/' . basename(dirname($plugin_file)) . '/' . basename($plugin_file);
+                    $full_path = $alt_path;
                 } else {
-                    error_log("Plugin activation error: Plugin file not found: {$plugin_file}");
+                    error_log("Plugin activation error: Plugin file not found. Tried: {$full_path} and {$alt_path}");
+                    error_log("Original plugin_file: {$original_plugin_file}");
                     return false;
                 }
             }
+            
+            error_log("Plugin activation: Attempting to activate plugin at: {$plugin_file} (full path: {$full_path})");
             
             require_once __DIR__ . '/../config/database.php';
             $db = new Database();
@@ -440,8 +445,13 @@ class PluginLoader {
             // Create plugins table if it doesn't exist
             try {
                 self::createPluginsTable($conn);
+                error_log("Plugin activation: Plugins table checked/created successfully");
             } catch (Exception $e) {
-                error_log("Plugin activation warning: Could not create plugins table: " . $e->getMessage());
+                error_log("Plugin activation error: Could not create plugins table: " . $e->getMessage());
+                throw new Exception("Database table creation failed: " . $e->getMessage());
+            } catch (Error $e) {
+                error_log("Plugin activation fatal error: Could not create plugins table: " . $e->getMessage());
+                throw new Exception("Database table creation fatal error: " . $e->getMessage());
             }
             
             // Check if plugin exists
@@ -452,11 +462,21 @@ class PluginLoader {
             if ($plugin) {
                 // Update status
                 $stmt = $conn->prepare("UPDATE plugins SET status = 'active', activated_at = NOW() WHERE plugin_file = ?");
-                $stmt->execute([$plugin_file]);
+                $result = $stmt->execute([$plugin_file]);
+                if (!$result) {
+                    $error_info = $stmt->errorInfo();
+                    error_log("Plugin activation error: Failed to update plugin status. SQL Error: " . ($error_info[2] ?? 'Unknown'));
+                    throw new Exception("Failed to update plugin status in database");
+                }
             } else {
                 // Insert new plugin
                 $stmt = $conn->prepare("INSERT INTO plugins (plugin_file, status, activated_at) VALUES (?, 'active', NOW())");
-                $stmt->execute([$plugin_file]);
+                $result = $stmt->execute([$plugin_file]);
+                if (!$result) {
+                    $error_info = $stmt->errorInfo();
+                    error_log("Plugin activation error: Failed to insert plugin. SQL Error: " . ($error_info[2] ?? 'Unknown'));
+                    throw new Exception("Failed to insert plugin into database");
+                }
             }
             
             // Fire activation hook before reloading

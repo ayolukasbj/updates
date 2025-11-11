@@ -320,8 +320,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                 }
                 
                 // Activate the plugin (this saves it to database)
+                error_log("Attempting to activate plugin: {$plugin_file_normalized}");
                 $activation_result = PluginLoader::activatePlugin($plugin_file_normalized);
-                if ($activation_result) {
+                
+                if ($activation_result === true) {
                     // Force reload plugins to detect the newly installed one
                     try {
                         PluginLoader::init(true); // Force reload
@@ -334,10 +336,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                     // Get more detailed error information
                     $error_details = error_get_last();
                     $error_msg = 'Failed to activate plugin.';
-                    if ($error_details) {
-                        $error_msg .= ' Error: ' . $error_details['message'];
+                    
+                    // Check if plugin was at least saved to database
+                    try {
+                        $db = new Database();
+                        $conn = $db->getConnection();
+                        if ($conn) {
+                            $check_stmt = $conn->prepare("SELECT * FROM plugins WHERE plugin_file = ?");
+                            $check_stmt->execute([$plugin_file_normalized]);
+                            $saved_plugin = $check_stmt->fetch(PDO::FETCH_ASSOC);
+                            
+                            if ($saved_plugin) {
+                                $error_msg .= ' Plugin was saved to database but activation returned false.';
+                                $error_msg .= ' Plugin status: ' . ($saved_plugin['status'] ?? 'unknown');
+                            } else {
+                                $error_msg .= ' Plugin was not saved to database.';
+                            }
+                        }
+                    } catch (Exception $e) {
+                        $error_msg .= ' Could not verify database status: ' . $e->getMessage();
                     }
+                    
+                    if ($error_details) {
+                        $error_msg .= ' Last error: ' . $error_details['message'];
+                    }
+                    
                     error_log("Plugin activation failed for: {$plugin_file_normalized}");
+                    error_log("Activation result: " . var_export($activation_result, true));
                     throw new Exception($error_msg . ' Please try activating it manually from the Plugins page.');
                 }
             } else {
