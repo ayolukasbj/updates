@@ -354,13 +354,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
             $available_plugins = [];
         }
         
+        // Normalize plugin slug for matching (handle common typos)
+        $normalized_requested = strtolower($plugin_slug);
+        if ($normalized_requested === 'mp3-tagger') {
+            $normalized_requested = 'mp3-tagger'; // Also try 3-agger as fallback
+        }
+        
         foreach ($available_plugins as $available_plugin) {
             $available_slug = $available_plugin['plugin_slug'] ?? '';
+            $normalized_available = strtolower($available_slug);
+            
             // Check exact match or case-insensitive match
-            if (strtolower($available_slug) === strtolower($plugin_slug)) {
+            if ($normalized_available === $normalized_requested) {
                 $plugin_found_in_list = true;
                 $actual_plugin_slug = $available_slug; // Use the exact slug from server
                 error_log("Plugin installation: Found plugin in available list - slug: {$actual_plugin_slug}");
+                break;
+            }
+            
+            // Special handling: "3-agger" should match "mp3-tagger" and vice versa
+            if (($normalized_requested === 'mp3-tagger' && $normalized_available === '3-agger') ||
+                ($normalized_requested === '3-agger' && $normalized_available === 'mp3-tagger')) {
+                $plugin_found_in_list = true;
+                $actual_plugin_slug = $available_slug; // Use the exact slug from server
+                error_log("Plugin installation: Found plugin with slug correction - requested: {$plugin_slug}, found: {$actual_plugin_slug}");
                 break;
             }
         }
@@ -1174,16 +1191,18 @@ include 'includes/header.php';
                 $is_installed = false;
                 $is_active = false;
                 $plugin_slug = $plugin['plugin_slug'] ?? '';
+                $normalized_plugin_slug = strtolower($plugin_slug);
                 
                 // Check by exact slug match first
                 if (isset($installed_plugins[$plugin_slug])) {
                     $is_installed = true;
                     $is_active = $installed_plugins[$plugin_slug]['active'];
                 } else {
-                    // Check by folder name or file path
+                    // Check by folder name or file path (with fuzzy matching for 3-agger/mp3-tagger)
                     foreach ($installed_plugins as $installed_slug => $installed_data) {
                         $plugin_file = $installed_data['file'] ?? '';
                         $plugin_file_normalized = $installed_data['file_normalized'] ?? '';
+                        $normalized_installed_slug = strtolower($installed_slug);
                         
                         // Check if plugin slug matches folder name or is in file path
                         if (strpos($plugin_file, $plugin_slug) !== false || 
@@ -1195,14 +1214,43 @@ include 'includes/header.php';
                             $is_active = $installed_data['active'];
                             break;
                         }
+                        
+                        // Fuzzy matching: "3-agger" should match "mp3-tagger" and vice versa
+                        if (($normalized_plugin_slug === '3-agger' && $normalized_installed_slug === 'mp3-tagger') ||
+                            ($normalized_plugin_slug === 'mp3-tagger' && $normalized_installed_slug === '3-agger')) {
+                            $is_installed = true;
+                            $is_active = $installed_data['active'];
+                            break;
+                        }
+                        
+                        // Also check if the plugin file path contains the slug (case-insensitive)
+                        if (stripos($plugin_file, $plugin_slug) !== false || 
+                            stripos($plugin_file_normalized, $plugin_slug) !== false) {
+                            $is_installed = true;
+                            $is_active = $installed_data['active'];
+                            break;
+                        }
                     }
                     
-                    // Also check database directly if not found
+                    // Also check database directly if not found (with fuzzy matching)
                     if (!$is_installed && isset($conn)) {
                         try {
+                            // Try exact match first
                             $checkStmt = $conn->prepare("SELECT status FROM plugins WHERE plugin_file LIKE ?");
                             $checkStmt->execute(['%' . $plugin_slug . '%']);
                             $db_result = $checkStmt->fetch(PDO::FETCH_ASSOC);
+                            
+                            // If not found and plugin_slug is "3-agger", try "mp3-tagger"
+                            if (!$db_result && $normalized_plugin_slug === '3-agger') {
+                                $checkStmt->execute(['%mp3-tagger%']);
+                                $db_result = $checkStmt->fetch(PDO::FETCH_ASSOC);
+                            }
+                            // If not found and plugin_slug is "mp3-tagger", try "3-agger"
+                            if (!$db_result && $normalized_plugin_slug === 'mp3-tagger') {
+                                $checkStmt->execute(['%3-agger%']);
+                                $db_result = $checkStmt->fetch(PDO::FETCH_ASSOC);
+                            }
+                            
                             if ($db_result) {
                                 $is_installed = true;
                                 $is_active = ($db_result['status'] === 'active');

@@ -408,26 +408,91 @@ class PluginLoader {
         try {
             // Validate plugin file path
             if (empty($plugin_file)) {
-                error_log("Plugin activation error: Empty plugin file path");
-                return false;
+                $error_msg = "Empty plugin file path";
+                error_log("Plugin activation error: {$error_msg}");
+                throw new Exception($error_msg);
             }
             
-            // Normalize plugin file path
-            $plugin_file = str_replace('\\', '/', $plugin_file);
+            // Normalize plugin file path - handle both relative and absolute paths
             $original_plugin_file = $plugin_file;
+            $plugin_file = str_replace('\\', '/', trim($plugin_file));
             
-            // Check if plugin file exists
-            $full_path = __DIR__ . '/../' . ltrim($plugin_file, '/');
-            if (!file_exists($full_path)) {
-                // Try alternative path
-                $alt_path = __DIR__ . '/../plugins/' . basename(dirname($plugin_file)) . '/' . basename($plugin_file);
-                if (file_exists($alt_path)) {
-                    $plugin_file = 'plugins/' . basename(dirname($plugin_file)) . '/' . basename($plugin_file);
-                    $full_path = $alt_path;
-                } else {
-                    error_log("Plugin activation error: Plugin file not found. Tried: {$full_path} and {$alt_path}");
-                    error_log("Original plugin_file: {$original_plugin_file}");
-                    return false;
+            // Check if it's already an absolute path
+            $is_absolute = false;
+            if (preg_match('/^[A-Za-z]:/', $plugin_file) || strpos($plugin_file, '/') === 0) {
+                $is_absolute = true;
+            }
+            
+            // Determine full path
+            if ($is_absolute) {
+                $full_path = $plugin_file;
+                // Convert to relative path for database storage
+                $base_path = str_replace('\\', '/', realpath(__DIR__ . '/../'));
+                $plugin_path_normalized = str_replace('\\', '/', $full_path);
+                if (strpos($plugin_path_normalized, $base_path) === 0) {
+                    $plugin_file = substr($plugin_path_normalized, strlen($base_path) + 1);
+                }
+            } else {
+                // Remove any leading slashes or "plugins/" duplicates
+                $plugin_file = ltrim($plugin_file, '/');
+                if (strpos($plugin_file, 'plugins/') === 0) {
+                    $plugin_file = substr($plugin_file, 8); // Remove "plugins/" prefix
+                }
+                
+                // Construct path
+                $full_path = realpath(__DIR__ . '/../plugins/' . $plugin_file);
+                if (!$full_path) {
+                    // Try with plugins/ prefix
+                    $full_path = realpath(__DIR__ . '/../' . $plugin_file);
+                }
+                
+                // If found, normalize plugin_file to relative path
+                if ($full_path) {
+                    $base_path = str_replace('\\', '/', realpath(__DIR__ . '/../'));
+                    $plugin_path_normalized = str_replace('\\', '/', $full_path);
+                    if (strpos($plugin_path_normalized, $base_path) === 0) {
+                        $plugin_file = substr($plugin_path_normalized, strlen($base_path) + 1);
+                    }
+                }
+            }
+            
+            // Final check - if still not found, try alternative paths
+            if (!$full_path || !file_exists($full_path)) {
+                $alt_paths = [
+                    __DIR__ . '/../plugins/' . basename($original_plugin_file),
+                    __DIR__ . '/../plugins/' . basename(dirname($original_plugin_file)) . '/' . basename($original_plugin_file),
+                ];
+                
+                // Extract folder and file from original path
+                $path_parts = explode('/', str_replace('\\', '/', $original_plugin_file));
+                if (count($path_parts) >= 2) {
+                    $folder = $path_parts[count($path_parts) - 2];
+                    $file = $path_parts[count($path_parts) - 1];
+                    $alt_paths[] = __DIR__ . '/../plugins/' . $folder . '/' . $file;
+                }
+                
+                $found = false;
+                foreach ($alt_paths as $alt_path) {
+                    $alt_path = realpath($alt_path);
+                    if ($alt_path && file_exists($alt_path)) {
+                        $full_path = $alt_path;
+                        // Convert to relative path
+                        $base_path = str_replace('\\', '/', realpath(__DIR__ . '/../'));
+                        $plugin_path_normalized = str_replace('\\', '/', $full_path);
+                        if (strpos($plugin_path_normalized, $base_path) === 0) {
+                            $plugin_file = substr($plugin_path_normalized, strlen($base_path) + 1);
+                        }
+                        $found = true;
+                        error_log("Plugin activation: Found plugin at alternative path: {$full_path}, normalized to: {$plugin_file}");
+                        break;
+                    }
+                }
+                
+                if (!$found) {
+                    $tried_paths = implode(', ', array_merge([$full_path], $alt_paths));
+                    $error_msg = "Plugin file not found. Original: {$original_plugin_file}. Tried: {$tried_paths}";
+                    error_log("Plugin activation error: {$error_msg}");
+                    throw new Exception($error_msg);
                 }
             }
             
@@ -438,8 +503,9 @@ class PluginLoader {
             $conn = $db->getConnection();
             
             if (!$conn) {
-                error_log("Plugin activation error: Database connection failed");
-                return false;
+                $error_msg = "Database connection failed";
+                error_log("Plugin activation error: {$error_msg}");
+                throw new Exception($error_msg);
             }
             
             // Create plugins table if it doesn't exist
@@ -577,16 +643,20 @@ class PluginLoader {
             
             return true;
         } catch (PDOException $e) {
+            $error_msg = "Database error: " . $e->getMessage();
             error_log("Plugin activation database error: " . $e->getMessage());
-            return false;
+            error_log("PDOException Code: " . $e->getCode());
+            throw new Exception($error_msg, 0, $e);
         } catch (Exception $e) {
             error_log("Plugin activation error: " . $e->getMessage());
             error_log("Stack trace: " . $e->getTraceAsString());
-            return false;
+            // Re-throw exception so caller can see the actual error
+            throw $e;
         } catch (Error $e) {
+            $error_msg = "Fatal error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine();
             error_log("Plugin activation fatal error: " . $e->getMessage());
             error_log("File: " . $e->getFile() . " Line: " . $e->getLine());
-            return false;
+            throw new Exception($error_msg, 0, $e);
         }
     }
     
