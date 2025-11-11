@@ -4,8 +4,66 @@
  * Admin interface for managing plugins
  */
 
-require_once 'auth-check.php';
-require_once __DIR__ . '/../config/database.php';
+// Start output buffering to catch any errors
+ob_start();
+error_reporting(E_ALL);
+ini_set('display_errors', 0); // Don't display errors directly, we'll handle them
+ini_set('log_errors', 1);
+
+// Set custom error handler to catch fatal errors
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    error_log("Plugins Page Error [$errno]: $errstr in $errfile:$errline");
+    return false; // Let PHP handle it normally, but we've logged it
+});
+
+// Set shutdown function to catch fatal errors
+register_shutdown_function(function() {
+    $error = error_get_last();
+    if ($error !== NULL && in_array($error['type'], [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE])) {
+        ob_clean();
+        http_response_code(500);
+        echo '<!DOCTYPE html><html><head><title>Error</title></head><body>';
+        echo '<h1>An error occurred</h1>';
+        echo '<p>Error: ' . htmlspecialchars($error['message']) . '</p>';
+        echo '<p>File: ' . htmlspecialchars($error['file']) . ' Line: ' . $error['line'] . '</p>';
+        echo '<p>Please check your error logs for more details.</p>';
+        echo '</body></html>';
+        exit;
+    }
+});
+
+// Initialize error tracking
+$init_error = '';
+$page_title = 'Plugin Management';
+$success = '';
+$error = '';
+
+// Load required files with error handling
+try {
+    if (!file_exists(__DIR__ . '/auth-check.php')) {
+        throw new Exception('auth-check.php file not found');
+    }
+    require_once __DIR__ . '/auth-check.php';
+} catch (Exception $e) {
+    $init_error = 'Authentication check failed: ' . $e->getMessage();
+    error_log("Plugins Page - auth-check.php error: " . $e->getMessage());
+} catch (Error $e) {
+    $init_error = 'Authentication check fatal error: ' . $e->getMessage();
+    error_log("Plugins Page - auth-check.php fatal error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+}
+
+try {
+    if (!file_exists(__DIR__ . '/../config/database.php')) {
+        throw new Exception('database.php file not found');
+    }
+    require_once __DIR__ . '/../config/database.php';
+} catch (Exception $e) {
+    $init_error = ($init_error ? $init_error . ' | ' : '') . 'Database config failed: ' . $e->getMessage();
+    error_log("Plugins Page - database.php error: " . $e->getMessage());
+} catch (Error $e) {
+    $init_error = ($init_error ? $init_error . ' | ' : '') . 'Database config fatal error: ' . $e->getMessage();
+    error_log("Plugins Page - database.php fatal error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
+}
 
 // Load plugin system with comprehensive error handling
 $plugin_system_error = '';
@@ -200,10 +258,22 @@ try {
 include 'includes/header.php';
 ?>
 
+<?php 
+// Clean output buffer before displaying page
+ob_end_clean();
+?>
+
 <div class="page-header">
     <h1><i class="fas fa-puzzle-piece"></i> Plugin Management</h1>
     <p>Manage and activate third-party plugins to extend your music platform functionality.</p>
 </div>
+
+<?php if ($init_error): ?>
+<div class="alert alert-danger" style="margin: 20px;">
+    <i class="fas fa-exclamation-triangle"></i> <strong>Initialization Error:</strong> <?php echo htmlspecialchars($init_error); ?>
+    <br><small>Please check your error logs and ensure all required files exist.</small>
+</div>
+<?php endif; ?>
 
 <?php if ($plugin_system_error): ?>
 <div class="alert alert-danger">
