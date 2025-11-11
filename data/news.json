@@ -1,0 +1,44 @@
+[
+    {
+        "id": "1",
+        "title": "Welcome to the Platform",
+        "slug": "welcome-to-platform",
+        "category": "Announcement",
+        "image": "assets/images/news-placeholder.jpg",
+        "content": "Welcome to our music streaming platform! We're excited to have you here.",
+        "excerpt": "Welcome to our music streaming platform!",
+        "views": 150,
+        "is_published": 1,
+        "featured": 1,
+        "author": "Admin",
+        "created_at": "2025-01-15 10:00:00"
+    },
+    {
+        "id": "2",
+        "title": "New Features Coming Soon",
+        "slug": "new-features-coming-soon",
+        "category": "Updates",
+        "image": "assets/images/news-placeholder.jpg",
+        "content": "We're working on exciting new features including playlist collaboration and social sharing.",
+        "excerpt": "Exciting new features in development",
+        "views": 89,
+        "is_published": 1,
+        "featured": 0,
+        "author": "Admin",
+        "created_at": "2025-01-20 14:30:00"
+    },
+    {
+        "id": "3",
+        "title": "Artist of the Month",
+        "slug": "artist-of-the-month",
+        "category": "Featured",
+        "image": "assets/images/news-placeholder.jpg",
+        "content": "Discover our featured artist for this month and explore their amazing collection.",
+        "excerpt": "Meet our featured artist",
+        "views": 234,
+        "is_published": 1,
+        "featured": 1,
+        "author": "Admin",
+        "created_at": "2025-01-25 09:15:00"
+    }
+]

@@ -1,0 +1,53 @@
+﻿PLATFORM UPDATE PACKAGE
+=======================
+Generated: 2025-11-11 11:31:28
+
+INCLUDED:
+--------
+✓ All PHP files (admin, api, includes, plugins, etc.)
+✓ All JavaScript files (assets/js/)
+✓ All CSS files (assets/css/)
+✓ All HTML/template files
+✓ All configuration templates (excluding live configs)
+✓ All plugin files (including MP3 Tagger plugin)
+✓ All image assets (excluding media uploads)
+✓ All documentation files
+✓ Database installation/setup files
+
+EXCLUDED (to prevent conflicts):
+--------------------------------
+✗ config/database.php (live database credentials)
+✗ config/config.php (live site configuration)
+✗ uploads/ folder (user-uploaded media files)
+✗ assets/media/ folder (media files)
+✗ node_modules/ (npm dependencies)
+✗ vendor/ (composer dependencies)
+✗ .git/ (version control)
+✗ .env files (environment variables)
+✗ .htaccess (server configuration)
+✗ *.log files (log files)
+✗ composer.lock, package-lock.json (lock files)
+
+IMPORTANT NOTES:
+----------------
+1. Before deploying, ensure you have backups of:
+   - Database
+   - Current live files
+   - Media uploads
+
+2. After deployment, verify:
+   - Database connection settings
+   - File permissions
+   - Plugin activation status
+   - Media file paths
+
+3. The MP3 Tagger plugin has been updated with:
+   - Fixed album art embedding (site logo)
+   - Automatic sync functionality
+   - Improved path resolution
+
+4. Player fixes included:
+   - Fixed play button functionality
+   - Fixed duration display
+   - Improved audio URL resolution
+

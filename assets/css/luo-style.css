@@ -1,0 +1,145 @@
+/* Additional Styling */
+
+/* Player Bottom Spacing */
+body {
+    padding-bottom: 100px;
+}
+
+/* Song Card Enhancements */
+.song-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.song-card:active {
+    transform: scale(0.98);
+}
+
+/* Play Overlay Animation */
+.play-overlay .play-btn {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+/* Stats Icons */
+.stat-item i {
+    font-size: 10px;
+}
+
+/* Header Enhancements */
+.header {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.95);
+}
+
+/* Hero Gradient */
+.hero-section {
+    position: relative;
+    overflow: hidden;
+}
+
+.hero-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" fill="rgba(255,255,255,0.1)"><path d="M0,60 L1200,0 L1200,120 L0,120 Z"/></svg>');
+    opacity: 0.3;
+}
+
+/* Player Volume Slider */
+#luo-volume-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    background: rgba(255, 255, 255, 0.3);
+    height: 4px;
+    border-radius: 2px;
+    outline: none;
+}
+
+#luo-volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: white;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+#luo-volume-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: white;
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+    .song-card {
+        min-height: 280px;
+    }
+    
+    .play-overlay .play-btn {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+    }
+}
+
+/* Loading Animation */
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+.song-cover.loading {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 2s infinite;
+}
+
+/* Error Message */
+.luo-error {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Add smooth scroll */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Focus states for accessibility */
+.luo-control-btn:focus,
+.luo-action-btn:focus,
+.song-card:focus {
+    outline: 2px solid rgba(102, 126, 234, 0.5);
+    outline-offset: 2px;
+}
+
