@@ -230,6 +230,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
             throw new Exception('Plugin slug or license server URL not configured');
         }
         
+        // Validate and correct plugin slug - prevent common mistakes
+        $plugin_slug = trim($plugin_slug);
+        if (preg_match('/^3-agger$/i', $plugin_slug)) {
+            // Common typo - should be mp3-tagger
+            error_log("Plugin installation: Detected incorrect plugin slug '3-agger', correcting to 'mp3-tagger'");
+            $plugin_slug = 'mp3-tagger';
+        }
+        
+        // Additional validation: plugin slug should be alphanumeric with hyphens/underscores
+        if (!preg_match('/^[a-z0-9_-]+$/i', $plugin_slug)) {
+            throw new Exception('Invalid plugin slug format. Plugin slug must contain only letters, numbers, hyphens, and underscores.');
+        }
+        
         // Download plugin from license server
         $download_url = rtrim($license_server_url, '/') . '/api/plugin-store.php?action=download&plugin_slug=' . urlencode($plugin_slug);
         if (!empty($license_key)) {
@@ -394,6 +407,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                 throw new Exception('Main plugin file not found. Expected: ' . $plugin_slug . '.php in ' . $extract_dir);
             }
             
+            // CRITICAL VALIDATION: Check the actual file path (before normalization) to ensure it's not in admin/includes/assets
+            $plugin_file_normalized_check = str_replace('\\', '/', $plugin_file);
+            $extract_dir_normalized_check = str_replace('\\', '/', rtrim($extract_dir, '/\\'));
+            $relative_check = str_replace($extract_dir_normalized_check . '/', '', $plugin_file_normalized_check);
+            
+            // Reject if file is in admin/, includes/, or assets/ directories
+            if (preg_match('#(^|[/\\\\])(admin|includes|assets)([/\\\\]|$)#i', $relative_check)) {
+                error_log("Plugin installation CRITICAL ERROR: Selected file is in excluded directory!");
+                error_log("  - File: {$plugin_file}");
+                error_log("  - Normalized: {$plugin_file_normalized_check}");
+                error_log("  - Relative: {$relative_check}");
+                throw new Exception('CRITICAL: The selected plugin file is in an excluded directory (admin/includes/assets). This should not happen. File: ' . basename($plugin_file) . ' in ' . dirname($relative_check));
+            }
+            
+            // Also check the actual file content to ensure it has Plugin Name header
+            $file_check_content = @file_get_contents($plugin_file);
+            if (!$file_check_content || (
+                stripos($file_check_content, 'Plugin Name:') === false && 
+                stripos($file_check_content, '* Plugin Name') === false &&
+                stripos($file_check_content, 'Plugin Name') === false
+            )) {
+                error_log("Plugin installation WARNING: Selected file does not have Plugin Name header: {$plugin_file}");
+                // Don't throw here, let the later validation handle it, but log it
+            }
+            
             // Verify this is the main plugin file (check for plugin header) - REQUIRED
             $file_content = @file_get_contents($plugin_file);
             $has_plugin_header = $file_content && (
@@ -516,10 +554,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
                     }
                 }
                 
-                // Final validation: ensure path doesn't contain admin/includes/assets
-                if (preg_match('#plugins/[^/]+/(admin|includes|assets)/#i', $plugin_file_normalized)) {
-                    error_log("Plugin installation ERROR: Detected excluded directory in path: {$plugin_file_normalized}");
-                    throw new Exception('Invalid plugin file path detected. The main plugin file cannot be in admin/, includes/, or assets/ directories.');
+                // Final validation: ensure normalized path doesn't contain admin/includes/assets (multiple patterns)
+                $validation_failed = false;
+                $validation_patterns = [
+                    '#plugins/[^/]+/(admin|includes|assets)/#i',  // plugins/slug/admin/
+                    '#plugins/[^/]+/(admin|includes|assets)\\\\#i',  // plugins/slug/admin\ (backslash)
+                    '#/(admin|includes|assets)/#i',  // Any /admin/ in path
+                    '#\\\\(admin|includes|assets)\\\\#i',  // Any \admin\ in path
+                ];
+                
+                foreach ($validation_patterns as $pattern) {
+                    if (preg_match($pattern, $plugin_file_normalized)) {
+                        error_log("Plugin installation CRITICAL ERROR: Detected excluded directory in normalized path!");
+                        error_log("  - Pattern: {$pattern}");
+                        error_log("  - Path: {$plugin_file_normalized}");
+                        error_log("  - Original file: {$plugin_file}");
+                        $validation_failed = true;
+                        break;
+                    }
+                }
+                
+                if ($validation_failed) {
+                    throw new Exception('CRITICAL: Invalid plugin file path detected after normalization. The main plugin file cannot be in admin/, includes/, or assets/ directories. Path: ' . $plugin_file_normalized);
                 }
                 
                 error_log("Plugin installation: Normalized plugin file path: {$plugin_file_normalized}");
