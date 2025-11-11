@@ -822,6 +822,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install_plugin'])) {
 
 // Fetch available plugins from license server
 $available_plugins = [];
+$license_server_status = 'unknown';
+$license_server_error = '';
+
 if (!empty($license_server_url)) {
     try {
         $store_url = rtrim($license_server_url, '/') . '/api/plugin-store.php?action=list';
@@ -829,16 +832,91 @@ if (!empty($license_server_url)) {
             $store_url .= '&license_key=' . urlencode($license_key);
         }
         
-        $response = @file_get_contents($store_url);
-        if ($response !== false) {
-            $data = json_decode($response, true);
-            if ($data && $data['success'] && isset($data['plugins'])) {
-                $available_plugins = $data['plugins'];
+        error_log("Plugin Store: Fetching plugins from: {$store_url}");
+        
+        // Use cURL for better error handling
+        if (function_exists('curl_init')) {
+            $ch = curl_init($store_url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Music Platform Plugin Store/1.0');
+            
+            $response = curl_exec($ch);
+            $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curl_error = curl_error($ch);
+            curl_close($ch);
+            
+            if ($curl_error) {
+                $license_server_status = 'error';
+                $license_server_error = "Connection error: {$curl_error}";
+                error_log("Plugin Store: cURL error - {$curl_error}");
+            } elseif ($http_code !== 200) {
+                $license_server_status = 'error';
+                $license_server_error = "HTTP error: {$http_code}";
+                error_log("Plugin Store: HTTP error - {$http_code}");
+                if ($response) {
+                    $error_data = json_decode($response, true);
+                    if ($error_data && isset($error_data['error'])) {
+                        $license_server_error .= " - " . $error_data['error'];
+                    }
+                }
+            } else {
+                $license_server_status = 'connected';
+                if ($response) {
+                    $data = json_decode($response, true);
+                    if ($data && $data['success'] && isset($data['plugins'])) {
+                        $available_plugins = $data['plugins'];
+                        error_log("Plugin Store: Successfully fetched " . count($available_plugins) . " plugins");
+                    } else {
+                        $license_server_status = 'warning';
+                        $license_server_error = "Invalid response format from license server";
+                        error_log("Plugin Store: Invalid response format");
+                    }
+                }
+            }
+        } else {
+            // Fallback to file_get_contents
+            $context = stream_context_create([
+                'http' => [
+                    'timeout' => 10,
+                    'follow_location' => true,
+                    'ignore_errors' => true,
+                    'user_agent' => 'Music Platform Plugin Store/1.0'
+                ],
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false
+                ]
+            ]);
+            
+            $response = @file_get_contents($store_url, false, $context);
+            if ($response !== false) {
+                $license_server_status = 'connected';
+                $data = json_decode($response, true);
+                if ($data && $data['success'] && isset($data['plugins'])) {
+                    $available_plugins = $data['plugins'];
+                }
+            } else {
+                $license_server_status = 'error';
+                $license_server_error = "Failed to connect to license server";
+                $last_error = error_get_last();
+                if ($last_error) {
+                    $license_server_error .= ": " . $last_error['message'];
+                }
             }
         }
     } catch (Exception $e) {
-        error_log("Error fetching plugins from store: " . $e->getMessage());
+        $license_server_status = 'error';
+        $license_server_error = $e->getMessage();
+        error_log("Plugin Store: Exception - " . $e->getMessage());
     }
+} else {
+    $license_server_status = 'not_configured';
+    $license_server_error = "License server URL not configured";
 }
 
 // Get installed plugins
@@ -990,6 +1068,42 @@ include 'includes/header.php';
             </div>
             <button type="submit" name="save_license_server" class="btn btn-primary">Save</button>
         </form>
+        
+        <?php if (!empty($license_server_url)): ?>
+        <div style="margin-top: 20px; padding: 15px; background: #f9fafb; border-radius: 5px;">
+            <strong>Connection Status:</strong>
+            <?php if ($license_server_status === 'connected'): ?>
+                <span style="color: #10b981; font-weight: bold;">
+                    <i class="fas fa-check-circle"></i> Connected
+                </span>
+                <br><small style="color: #6b7280;">Found <?php echo count($available_plugins); ?> plugin(s) available.</small>
+            <?php elseif ($license_server_status === 'warning'): ?>
+                <span style="color: #f59e0b; font-weight: bold;">
+                    <i class="fas fa-exclamation-triangle"></i> Warning
+                </span>
+                <br><small style="color: #6b7280;"><?php echo htmlspecialchars($license_server_error); ?></small>
+            <?php elseif ($license_server_status === 'error'): ?>
+                <span style="color: #ef4444; font-weight: bold;">
+                    <i class="fas fa-times-circle"></i> Connection Error
+                </span>
+                <br><small style="color: #6b7280;"><?php echo htmlspecialchars($license_server_error); ?></small>
+                <br><small style="color: #6b7280;">Please check:</small>
+                <ul style="margin: 10px 0 0 20px; color: #6b7280;">
+                    <li>The license server URL is correct: <code><?php echo htmlspecialchars($license_server_url); ?></code></li>
+                    <li>The license server is accessible from this server</li>
+                    <li>The API endpoint exists: <code>/api/plugin-store.php</code></li>
+                </ul>
+            <?php elseif ($license_server_status === 'not_configured'): ?>
+                <span style="color: #6b7280; font-weight: bold;">
+                    <i class="fas fa-info-circle"></i> Not Configured
+                </span>
+            <?php else: ?>
+                <span style="color: #6b7280; font-weight: bold;">
+                    <i class="fas fa-question-circle"></i> Unknown
+                </span>
+            <?php endif; ?>
+        </div>
+        <?php endif; ?>
     </div>
 </div>
 
