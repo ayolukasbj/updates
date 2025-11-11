@@ -57,23 +57,87 @@ $license_key = '';
 $license_server_url = '';
 
 try {
-    if (function_exists('get_option')) {
-        $license_key = get_option('license_key', '');
-        $license_server_url = get_option('license_server_url', '');
-    } else {
-        // Fallback to direct database query
-        $db = new Database();
-        $conn = $db->getConnection();
-        if ($conn) {
-            $stmt = $conn->prepare("SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('license_key', 'license_server_url')");
-            $stmt->execute();
-            $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-            
-            foreach ($results as $row) {
-                if ($row['setting_key'] === 'license_key') {
-                    $license_key = $row['setting_value'];
-                } elseif ($row['setting_key'] === 'license_server_url') {
-                    $license_server_url = $row['setting_value'];
+    // First, try to get from config constant (set during installation)
+    if (defined('LICENSE_SERVER_URL') && !empty(LICENSE_SERVER_URL)) {
+        $license_server_url = LICENSE_SERVER_URL;
+    }
+    
+    // If not in config, try to get from database
+    if (empty($license_server_url)) {
+        if (function_exists('get_option')) {
+            $license_key = get_option('license_key', '');
+            $license_server_url = get_option('license_server_url', '');
+        } else {
+            // Fallback to direct database query
+            $db = new Database();
+            $conn = $db->getConnection();
+            if ($conn) {
+                $stmt = $conn->prepare("SELECT setting_key, setting_value FROM settings WHERE setting_key IN ('license_key', 'license_server_url')");
+                $stmt->execute();
+                $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                
+                foreach ($results as $row) {
+                    if ($row['setting_key'] === 'license_key') {
+                        $license_key = $row['setting_value'];
+                    } elseif ($row['setting_key'] === 'license_server_url') {
+                        $license_server_url = $row['setting_value'];
+                    }
+                }
+            }
+        }
+    }
+    
+    // If still empty, auto-detect based on environment (same logic as install.php)
+    if (empty($license_server_url)) {
+        $is_local = (
+            $_SERVER['HTTP_HOST'] === 'localhost' || 
+            strpos($_SERVER['HTTP_HOST'], '127.0.0.1') !== false ||
+            strpos($_SERVER['HTTP_HOST'], 'localhost') !== false ||
+            strpos($_SERVER['HTTP_HOST'], '.local') !== false
+        );
+        
+        if ($is_local) {
+            $license_server_url = 'http://localhost/license-server';
+        } else {
+            $license_server_url = 'https://hylinktech.com/server';
+        }
+        
+        // Save the auto-detected URL to database for future use
+        try {
+            if (function_exists('update_option')) {
+                update_option('license_server_url', $license_server_url);
+            } else {
+                $db = new Database();
+                $conn = $db->getConnection();
+                if ($conn) {
+                    $stmt = $conn->prepare("
+                        INSERT INTO settings (setting_key, setting_value) 
+                        VALUES ('license_server_url', ?) 
+                        ON DUPLICATE KEY UPDATE setting_value = ?
+                    ");
+                    $stmt->execute([$license_server_url, $license_server_url]);
+                }
+            }
+        } catch (Exception $e) {
+            error_log("Error saving auto-detected license server URL: " . $e->getMessage());
+        }
+    }
+    
+    // Get license key if not already retrieved
+    if (empty($license_key)) {
+        if (function_exists('get_option')) {
+            $license_key = get_option('license_key', '');
+        } else {
+            if (!isset($conn)) {
+                $db = new Database();
+                $conn = $db->getConnection();
+            }
+            if ($conn) {
+                $stmt = $conn->prepare("SELECT setting_value FROM settings WHERE setting_key = 'license_key'");
+                $stmt->execute();
+                $result = $stmt->fetch(PDO::FETCH_ASSOC);
+                if ($result) {
+                    $license_key = $result['setting_value'];
                 }
             }
         }
