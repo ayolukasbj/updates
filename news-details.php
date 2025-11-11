@@ -776,30 +776,51 @@ if (empty($site_url)) {
     $site_url = $protocol . ($_SERVER['HTTP_HOST'] ?? 'localhost');
 }
 
-if (!empty($news_item['featured_image'])) {
-    $img_path = $news_item['featured_image'];
-    if (strpos($img_path, 'http') === 0) {
+// Check all possible image fields in priority order
+$image_fields = ['featured_image', 'display_image', 'image'];
+$img_path = '';
+
+foreach ($image_fields as $field) {
+    if (!empty($news_item[$field]) && trim($news_item[$field]) !== '') {
+        $img_path = trim($news_item[$field]);
+        break;
+    }
+}
+
+// If still no image, try to get from database directly
+if (empty($img_path) && !empty($news_item['id'])) {
+    try {
+        $imgStmt = $conn->prepare("SELECT featured_image, image FROM news WHERE id = ?");
+        $imgStmt->execute([$news_item['id']]);
+        $imgData = $imgStmt->fetch(PDO::FETCH_ASSOC);
+        if ($imgData) {
+            if (!empty($imgData['featured_image']) && trim($imgData['featured_image']) !== '') {
+                $img_path = trim($imgData['featured_image']);
+            } elseif (!empty($imgData['image']) && trim($imgData['image']) !== '') {
+                $img_path = trim($imgData['image']);
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Error fetching image from DB: " . $e->getMessage());
+    }
+}
+
+// Convert to absolute URL
+if (!empty($img_path)) {
+    if (strpos($img_path, 'http://') === 0 || strpos($img_path, 'https://') === 0) {
         $share_image = $img_path; // Already absolute
     } else {
-        $share_image = $site_url . '/' . ltrim($img_path, '/');
-    }
-} elseif (!empty($news_item['display_image'])) {
-    $img_path = $news_item['display_image'];
-    if (strpos($img_path, 'http') === 0) {
-        $share_image = $img_path;
-    } else {
-        $share_image = $site_url . '/' . ltrim($img_path, '/');
-    }
-} elseif (!empty($news_item['image'])) {
-    $img_path = $news_item['image'];
-    if (strpos($img_path, 'http') === 0) {
-        $share_image = $img_path;
-    } else {
-        $share_image = $site_url . '/' . ltrim($img_path, '/');
+        // Remove leading slash if present, then add site URL
+        $img_path = ltrim($img_path, '/');
+        $share_image = $site_url . '/' . $img_path;
     }
 } else {
     $share_image = $site_url . '/assets/images/default-news.jpg';
 }
+
+// Debug logging
+error_log("News share image - Field values: featured_image=" . ($news_item['featured_image'] ?? 'empty') . ", display_image=" . ($news_item['display_image'] ?? 'empty') . ", image=" . ($news_item['image'] ?? 'empty'));
+error_log("News share image - Final URL: " . $share_image);
 
 // Calculate share count (using views as proxy)
 $share_count = round(($news_item['views'] ?? 0) * 0.14); // Approximate 14% share rate

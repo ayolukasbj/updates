@@ -37,46 +37,22 @@ try {
             $checkDownloads = $conn->query("SHOW TABLES LIKE 'downloads'");
             $hasDownloadsTable = $checkDownloads->rowCount() > 0;
             
-            // Today - Most popular songs today (by downloads today or recent uploads)
+            // Today - Most popular songs today (simplified - show most downloaded songs)
             try {
-                if ($hasDownloadsTable) {
-                    $todayQuery = "
-                        SELECT s.*, 
-                               s.uploaded_by,
-                               COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
-                               COALESCE(s.is_collaboration, 0) as is_collaboration,
-                               COALESCE(s.plays, 0) as plays,
-                               COALESCE(s.downloads, 0) as downloads,
-                               COUNT(d.id) as today_downloads,
-                               COALESCE(s.upload_date, s.created_at, s.uploaded_at) as uploaded_at
-                        FROM songs s
-                        LEFT JOIN users u ON s.uploaded_by = u.id
-                        LEFT JOIN downloads d ON s.id = d.song_id AND DATE(d.download_date) = CURDATE()
-                        WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-                        GROUP BY s.id
-                        HAVING today_downloads > 0 OR (s.downloads > 0 AND DATE(COALESCE(s.upload_date, s.created_at, s.uploaded_at)) = CURDATE())
-                        ORDER BY today_downloads DESC, s.downloads DESC, s.plays DESC
-                        LIMIT 5
-                    ";
-                } else {
-                    // Fallback: songs uploaded today or with most downloads
-                    $todayQuery = "
-                        SELECT s.*, 
-                               s.uploaded_by,
-                               COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
-                               COALESCE(s.is_collaboration, 0) as is_collaboration,
-                               COALESCE(s.plays, 0) as plays,
-                               COALESCE(s.downloads, 0) as downloads,
-                               COALESCE(s.upload_date, s.created_at, s.uploaded_at) as uploaded_at
-                        FROM songs s
-                        LEFT JOIN users u ON s.uploaded_by = u.id
-                        WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-                        AND s.downloads > 0
-                        AND (DATE(COALESCE(s.upload_date, s.created_at, s.uploaded_at)) = CURDATE() OR s.downloads > 0)
-                        ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
-                        LIMIT 5
-                    ";
-                }
+                $todayQuery = "
+                    SELECT s.*, 
+                           s.uploaded_by,
+                           COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
+                           COALESCE(s.is_collaboration, 0) as is_collaboration,
+                           COALESCE(s.plays, 0) as plays,
+                           COALESCE(s.downloads, 0) as downloads,
+                           COALESCE(s.upload_date, s.created_at, s.uploaded_at) as uploaded_at
+                    FROM songs s
+                    LEFT JOIN users u ON s.uploaded_by = u.id
+                    WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
+                    ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
+                    LIMIT 5
+                ";
                 $stmt = $conn->query($todayQuery);
                 $popular_today = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 error_log("Most Popular Today: Found " . count($popular_today) . " songs");
@@ -85,46 +61,22 @@ try {
                 $popular_today = [];
             }
             
-            // This Week - Most popular songs this week
+            // This Week - Most popular songs this week (simplified)
             try {
-                if ($hasDownloadsTable) {
-                    $weekQuery = "
-                        SELECT s.*, 
-                               s.uploaded_by,
-                               COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
-                               COALESCE(s.is_collaboration, 0) as is_collaboration,
-                               COALESCE(s.plays, 0) as plays,
-                               COALESCE(s.downloads, 0) as downloads,
-                               COUNT(d.id) as week_downloads,
-                               COALESCE(s.upload_date, s.created_at, s.uploaded_at) as uploaded_at
-                        FROM songs s
-                        LEFT JOIN users u ON s.uploaded_by = u.id
-                        LEFT JOIN downloads d ON s.id = d.song_id AND d.download_date >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-                        WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-                        GROUP BY s.id
-                        HAVING week_downloads > 0 OR (s.downloads > 0 AND COALESCE(s.upload_date, s.created_at, s.uploaded_at) >= DATE_SUB(NOW(), INTERVAL 7 DAY))
-                        ORDER BY week_downloads DESC, s.downloads DESC, s.plays DESC
-                        LIMIT 5
-                    ";
-                } else {
-                    // Fallback: songs uploaded this week or with most downloads
-                    $weekQuery = "
-                        SELECT s.*, 
-                               s.uploaded_by,
-                               COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
-                               COALESCE(s.is_collaboration, 0) as is_collaboration,
-                               COALESCE(s.plays, 0) as plays,
-                               COALESCE(s.downloads, 0) as downloads,
-                               COALESCE(s.upload_date, s.created_at, s.uploaded_at) as uploaded_at
-                        FROM songs s
-                        LEFT JOIN users u ON s.uploaded_by = u.id
-                        WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-                        AND s.downloads > 0
-                        AND (COALESCE(s.upload_date, s.created_at, s.uploaded_at) >= DATE_SUB(NOW(), INTERVAL 7 DAY) OR s.downloads > 0)
-                        ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
-                        LIMIT 5
-                    ";
-                }
+                $weekQuery = "
+                    SELECT s.*, 
+                           s.uploaded_by,
+                           COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
+                           COALESCE(s.is_collaboration, 0) as is_collaboration,
+                           COALESCE(s.plays, 0) as plays,
+                           COALESCE(s.downloads, 0) as downloads,
+                           COALESCE(s.upload_date, s.created_at, s.uploaded_at) as uploaded_at
+                    FROM songs s
+                    LEFT JOIN users u ON s.uploaded_by = u.id
+                    WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
+                    ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
+                    LIMIT 5
+                ";
                 $stmt = $conn->query($weekQuery);
                 $popular_week = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 error_log("Most Popular Week: Found " . count($popular_week) . " songs");
@@ -133,46 +85,22 @@ try {
                 $popular_week = [];
             }
             
-            // This Month - Most popular songs this month
+            // This Month - Most popular songs this month (simplified)
             try {
-                if ($hasDownloadsTable) {
-                    $monthQuery = "
-                        SELECT s.*, 
-                               s.uploaded_by,
-                               COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
-                               COALESCE(s.is_collaboration, 0) as is_collaboration,
-                               COALESCE(s.plays, 0) as plays,
-                               COALESCE(s.downloads, 0) as downloads,
-                               COUNT(d.id) as month_downloads,
-                               COALESCE(s.upload_date, s.created_at, s.uploaded_at) as uploaded_at
-                        FROM songs s
-                        LEFT JOIN users u ON s.uploaded_by = u.id
-                        LEFT JOIN downloads d ON s.id = d.song_id AND d.download_date >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-                        WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-                        GROUP BY s.id
-                        HAVING month_downloads > 0 OR (s.downloads > 0 AND COALESCE(s.upload_date, s.created_at, s.uploaded_at) >= DATE_SUB(NOW(), INTERVAL 30 DAY))
-                        ORDER BY month_downloads DESC, s.downloads DESC, s.plays DESC
-                        LIMIT 5
-                    ";
-                } else {
-                    // Fallback: songs uploaded this month or with most downloads
-                    $monthQuery = "
-                        SELECT s.*, 
-                               s.uploaded_by,
-                               COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
-                               COALESCE(s.is_collaboration, 0) as is_collaboration,
-                               COALESCE(s.plays, 0) as plays,
-                               COALESCE(s.downloads, 0) as downloads,
-                               COALESCE(s.upload_date, s.created_at, s.uploaded_at) as uploaded_at
-                        FROM songs s
-                        LEFT JOIN users u ON s.uploaded_by = u.id
-                        WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-                        AND s.downloads > 0
-                        AND (COALESCE(s.upload_date, s.created_at, s.uploaded_at) >= DATE_SUB(NOW(), INTERVAL 30 DAY) OR s.downloads > 0)
-                        ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
-                        LIMIT 5
-                    ";
-                }
+                $monthQuery = "
+                    SELECT s.*, 
+                           s.uploaded_by,
+                           COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
+                           COALESCE(s.is_collaboration, 0) as is_collaboration,
+                           COALESCE(s.plays, 0) as plays,
+                           COALESCE(s.downloads, 0) as downloads,
+                           COALESCE(s.upload_date, s.created_at, s.uploaded_at) as uploaded_at
+                    FROM songs s
+                    LEFT JOIN users u ON s.uploaded_by = u.id
+                    WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
+                    ORDER BY s.downloads DESC, s.plays DESC, s.id DESC
+                    LIMIT 5
+                ";
                 $stmt = $conn->query($monthQuery);
                 $popular_month = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 error_log("Most Popular Month: Found " . count($popular_month) . " songs");

@@ -30,36 +30,30 @@ if (!function_exists('base_url')) {
 }
 
 try {
-    // Get 6 most recent songs
-    $recent_songs = getRecentSongs(6);
-    error_log("Recently Uploaded Section: Found " . count($recent_songs) . " songs");
+    // Use exact same query as songs.php
+    require_once __DIR__ . '/../../config/database.php';
+    $db = new Database();
+    $conn = $db->getConnection();
     
-    if (empty($recent_songs)) {
-        // Try direct database query as fallback
-        if (function_exists('get_db_connection')) {
-            $conn = get_db_connection();
-            if ($conn) {
-                $stmt = $conn->prepare("
-                    SELECT s.*, 
-                           s.uploaded_by,
-                           COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
-                           COALESCE(s.is_collaboration, 0) as is_collaboration,
-                           COALESCE(s.plays, 0) as plays,
-                           COALESCE(s.downloads, 0) as downloads,
-                           COALESCE(s.upload_date, s.created_at, s.uploaded_at) as uploaded_at
-                    FROM songs s
-                    LEFT JOIN users u ON s.uploaded_by = u.id
-                    WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
-                    AND s.file_path IS NOT NULL 
-                    AND s.file_path != ''
-                    ORDER BY s.id DESC
-                    LIMIT 6
-                ");
-                $stmt->execute();
-                $recent_songs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-                error_log("Recently Uploaded Section (Direct Query): Found " . count($recent_songs) . " songs");
-            }
-        }
+    if ($conn) {
+        $stmt = $conn->prepare("
+            SELECT s.*, 
+                   s.uploaded_by,
+                   COALESCE(s.artist, u.username, 'Unknown Artist') as artist,
+                   COALESCE(s.is_collaboration, 0) as is_collaboration,
+                   COALESCE(s.plays, 0) as plays,
+                   COALESCE(s.downloads, 0) as downloads
+            FROM songs s
+            LEFT JOIN users u ON s.uploaded_by = u.id
+            WHERE (s.status = 'active' OR s.status IS NULL OR s.status = '' OR s.status = 'approved')
+            ORDER BY s.id DESC
+            LIMIT 6
+        ");
+        $stmt->execute();
+        $recent_songs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        error_log("Recently Uploaded Section: Found " . count($recent_songs) . " songs");
+    } else {
+        $recent_songs = [];
     }
 } catch (Exception $e) {
     error_log("Recently Uploaded Section Error: " . $e->getMessage());
