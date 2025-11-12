@@ -80,21 +80,34 @@ header('Content-Type: text/html; charset=utf-8');
                 // Normalize path separators
                 $target_path = str_replace('\\', '/', $target_path);
                 
+                // Check if file exists first (before security check)
+                if (!file_exists($target_path)) {
+                    $not_found++;
+                    echo "⚠️  Not found (already deleted?): $file_path\n";
+                    continue;
+                }
+                
                 // Security check: prevent deleting files outside root
+                // Only check if file exists (realpath returns false for non-existent files)
                 $real_target = realpath($target_path);
                 $real_root = realpath($root_path);
                 
-                if (!$real_target || strpos($real_target, $real_root) !== 0) {
-                    $error_msg = "Security: Cannot delete file outside root: $file_path";
+                if (!$real_root) {
+                    $error_msg = "Cannot determine root path: $root_path";
                     $errors[] = $error_msg;
                     echo "❌ $error_msg\n";
                     continue;
                 }
                 
-                // Check if file exists
-                if (!file_exists($target_path)) {
-                    $not_found++;
-                    echo "⚠️  Not found (already deleted?): $file_path\n";
+                // Normalize both paths for comparison (handle Windows/Linux differences)
+                $real_target_normalized = str_replace('\\', '/', $real_target);
+                $real_root_normalized = str_replace('\\', '/', $real_root);
+                
+                // Check if target is within root directory
+                if (!$real_target || strpos($real_target_normalized, $real_root_normalized) !== 0) {
+                    $error_msg = "Security: Cannot delete file outside root: $file_path (target: $real_target_normalized, root: $real_root_normalized)";
+                    $errors[] = $error_msg;
+                    echo "❌ $error_msg\n";
                     continue;
                 }
                 
