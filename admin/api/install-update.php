@@ -477,13 +477,46 @@ function extractUpdate($zip_path, $temp_dir, $version) {
     ];
 }
 
-function deleteFiles($root_path) {
+function deleteFiles($root_path, $extract_path = null) {
     /**
      * Delete files listed in deletions.txt from the live server
      * @param string $root_path Root path of the installation
+     * @param string $extract_path Optional path to extracted update package (where deletions.txt should be)
      * @return array Result with deleted count and errors
      */
-    $deletions_file = $root_path . '/updates/deletions.txt';
+    // First, try to find deletions.txt in the extracted update package
+    $deletions_file = null;
+    if (!empty($extract_path)) {
+        // Look for deletions.txt in the extract path (may be in root or updates subfolder)
+        $possible_paths = [
+            rtrim($extract_path, '/\\') . '/deletions.txt',
+            rtrim($extract_path, '/\\') . '/updates/deletions.txt',
+        ];
+        
+        // Also check if extract_path contains a subdirectory (GitHub ZIP structure)
+        $items = @scandir($extract_path);
+        if ($items) {
+            foreach ($items as $item) {
+                if ($item !== '.' && $item !== '..' && is_dir($extract_path . '/' . $item)) {
+                    $possible_paths[] = rtrim($extract_path, '/\\') . '/' . $item . '/deletions.txt';
+                    $possible_paths[] = rtrim($extract_path, '/\\') . '/' . $item . '/updates/deletions.txt';
+                }
+            }
+        }
+        
+        foreach ($possible_paths as $path) {
+            if (file_exists($path)) {
+                $deletions_file = $path;
+                logMessage("Found deletions.txt in update package: $path");
+                break;
+            }
+        }
+    }
+    
+    // Fallback: check live server's updates folder (for backward compatibility)
+    if (empty($deletions_file)) {
+        $deletions_file = $root_path . '/updates/deletions.txt';
+    }
     
     if (!file_exists($deletions_file)) {
         logMessage("No deletions.txt file found, skipping file deletions");
@@ -493,6 +526,8 @@ function deleteFiles($root_path) {
             'errors_count' => 0
         ];
     }
+    
+    logMessage("Using deletions.txt from: $deletions_file");
     
     $deleted = 0;
     $errors = [];
@@ -986,11 +1021,13 @@ try {
                     throw new Exception('Cannot determine root path');
                 }
                 
-                // First, delete files listed in deletions.txt
+                // First, delete files listed in deletions.txt (from the extracted update package)
                 logMessage("Checking for files to delete...");
-                $delete_result = deleteFiles($root_path);
+                $delete_result = deleteFiles($root_path, $extract_path);
                 if ($delete_result['files_deleted'] > 0) {
                     logMessage("Deleted " . $delete_result['files_deleted'] . " files from live server");
+                } else {
+                    logMessage("No files were deleted (deletions.txt may be empty or not found)");
                 }
                 
                 // Then install new/updated files
