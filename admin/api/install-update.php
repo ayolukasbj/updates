@@ -566,12 +566,31 @@ function deleteFiles($root_path, $extract_path = null) {
             continue;
         }
         
+        // Check if it's a directory (shouldn't be, but be safe)
+        if (is_dir($target_path)) {
+            $error_msg = "Skipping directory (use rmdir manually): $file_path";
+            $errors[] = $error_msg;
+            logMessage("WARNING: $error_msg");
+            continue;
+        }
+        
+        // Check if file is writable
+        if (!is_writable($target_path) && !is_writable(dirname($target_path))) {
+            $error_msg = "File or directory not writable: $file_path";
+            $errors[] = $error_msg;
+            logMessage("ERROR: $error_msg");
+            continue;
+        }
+        
         // Delete the file
-        if (@unlink($target_path)) {
+        $delete_result = @unlink($target_path);
+        if ($delete_result) {
             $deleted++;
-            logMessage("Deleted: $file_path");
+            logMessage("✅ Successfully deleted: $file_path");
         } else {
-            $error_msg = "Failed to delete: $file_path";
+            $last_error = error_get_last();
+            $error_detail = $last_error ? $last_error['message'] : 'Unknown error (check permissions)';
+            $error_msg = "Failed to delete: $file_path - $error_detail";
             $errors[] = $error_msg;
             logMessage("ERROR: $error_msg");
         }
@@ -1022,12 +1041,19 @@ try {
                 }
                 
                 // First, delete files listed in deletions.txt (from the extracted update package)
-                logMessage("Checking for files to delete...");
+                logMessage("=== STARTING FILE DELETION PROCESS ===");
+                logMessage("Root path: $root_path");
+                logMessage("Extract path: $extract_path");
                 $delete_result = deleteFiles($root_path, $extract_path);
+                logMessage("=== FILE DELETION PROCESS COMPLETE ===");
                 if ($delete_result['files_deleted'] > 0) {
-                    logMessage("Deleted " . $delete_result['files_deleted'] . " files from live server");
+                    logMessage("✅ Successfully deleted " . $delete_result['files_deleted'] . " files from live server");
                 } else {
-                    logMessage("No files were deleted (deletions.txt may be empty or not found)");
+                    if ($delete_result['errors_count'] > 0) {
+                        logMessage("⚠️  No files were deleted, but " . $delete_result['errors_count'] . " errors occurred");
+                    } else {
+                        logMessage("ℹ️  No files were deleted (deletions.txt may be empty, not found, or files already deleted)");
+                    }
                 }
                 
                 // Then install new/updated files
