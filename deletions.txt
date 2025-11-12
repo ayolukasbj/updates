@@ -52,7 +52,112 @@ admin/test-dashboard.php
 # API/AJAX test files removed
 api/test-stream.php
 ajax/test.php
+ajax/simple.php
+
+# Backup files removed
+upload-backup.php
+song-details-backup.php
+index back.php
+
+# Working/Simple test files removed
+upload-working.php
+index-working.php
+upload-simple.php
+index-simple.php
+index-basic.php
+dashboard-simple.php
+artist-dashboard-simple.php
 
 # Production cleanup script (should be removed after use)
 production-cleanup.php
 
+# Documentation/Guide files removed (keep only README.md)
+PRODUCTION_SECURITY_AUDIT.md
+URL_FIX_INSTRUCTIONS.md
+URGENT_FIXES_APPLIED.md
+UPDATE_SYSTEM_GUIDE.md
+UPDATE_SOURCES.md
+UPDATE_PACKAGE_GUIDE.md
+UPDATES_FOLDER_SETUP.md
+UPDATES_FOLDER_CONTENTS.md
+TESTING_GUIDE.md
+TAB_PERSISTENCE_FIX.md
+SHARED_HOSTING_VOICE_TAG.md
+SEARCH_FEATURE.md
+REMOVE_MUSIC_BASE_SUMMARY.md
+QUICK_START_TEST.md
+PROTECTION_GUIDE.md
+PROJECT_SUMMARY.md
+PROFILE_UPDATE_DEBUGGING.md
+PROFILE_SOCIAL_UPDATE.md
+PROFILE_SAVE_FIX.md
+PRODUCTION_SETUP_GUIDE.md
+PRE_PRODUCTION_CHECKLIST.md
+PLUGIN_SYSTEM_SUMMARY.md
+PLUGIN_SYSTEM_GUIDE.md
+PLUGIN_STORE_GUIDE.md
+MP3_TAGGER_SETUP.md
+MP3_TAGGER_PLUGIN_GUIDE.md
+LIVE_SERVER_FIX.md
+LICENSE_VERIFICATION_FIX.md
+LICENSE_SERVER_UPDATE_API_GUIDE.md
+INSTALLATION_GUIDE.md
+HOW_TO_EDIT_VERSION_CPANEL.md
+HOMEPAGE_SETUP_GUIDE.md
+HOMEPAGE_FIXES.md
+HEADER_IMPLEMENTATION.md
+GITHUB_UPDATES_GUIDE.md
+FIX_UPLOAD_DATABASE.md
+FIX_ALL_ISSUES.md
+FIXES_SUMMARY.md
+FIXES_LATEST.md
+FILES_TO_UPLOAD.md
+DESIGN_STRUCTURE.md
+DATABASE_SYNC_GUIDE.md
+DATABASE_IMPORT_GUIDE.md
+CPANEL_UPDATE_SETUP.md
+COMPREHENSIVE_FIXES_SUMMARY.md
+COMPLETE_FIX_GUIDE.md
+COLLABORATION_FIX_INSTRUCTIONS.md
+COLLABORATION_FEATURES_SUMMARY.md
+CLEAN_INSTALL_GUIDE.md
+BUGFIXES_SUMMARY.md
+ARTIST_PROFILE_FIXES.md
+ARTIST_DASHBOARD_UPDATE.md
+ADMIN_STATUS_SUMMARY.md
+ADMIN_SETUP_GUIDE.md
+ADMIN_SETTINGS_SUMMARY.md
+ADMIN_AND_THEMES_COMPLETE.md
+BASE_URL_FIX_README.md
+admin/QUICK_START_PROFILE.md
+admin/FRONTEND_UPDATE_GUIDE.md
+admin/EMAIL_VERIFICATION_GUIDE.md
+admin/ADVANCED_SETTINGS_GUIDE.md
+updates/DELETION_SYSTEM_README.md
+
+# Development scripts removed
+sync-to-updates.bat
+sync-all-folders.bat
+copy-to-updates.bat
+sync-to-updates.ps1
+copy-platform-to-updates.ps1
+prepare-update.php
+sync-to-updates.php
+
+# Development/utility files removed
+exclude-list.txt
+check-collaboration-field.php
+check-db-schema.php
+check-songs-db.php
+clear-db.php
+clear-json-songs.php
+create-plugin-zip.php
+create-sample-news.php
+error-check.php
+fix-database-schema.php
+fix-songs-columns.php
+fix-songs-table.php
+import-database.php
+profile-diagnostic.php
+sync-database-tables.php
+backfill-artist-names.php
