@@ -57,26 +57,88 @@ try {
         exit;
     }
     
-    // Get audio file path - only file_path column exists
-    $audio_file = !empty($song['file_path']) ? trim($song['file_path']) : '';
-    
-    if (empty($audio_file)) {
-        header('Content-Type: audio/mpeg');
-        header('Content-Length: 0');
-        exit;
-    }
-    
-    // Normalize path
-    $audio_file = str_replace('\\', '/', trim($audio_file));
-    $audio_file = ltrim($audio_file, '/');
-    
-    // Get base directory
+    // Get base directory first
     $base_dir = realpath(__DIR__ . '/../');
     if ($base_dir === false) {
         header('Content-Type: audio/mpeg');
         header('Content-Length: 0');
         exit;
     }
+    
+    // Get audio file path - only file_path column exists
+    $audio_file = !empty($song['file_path']) ? trim($song['file_path']) : '';
+    
+    // If file_path is empty, try to find file by size
+    if (empty($audio_file)) {
+        // Get file_size from database
+        $size_stmt = $conn->prepare("SELECT file_size FROM songs WHERE id = ? LIMIT 1");
+        $size_stmt->execute([$song_id]);
+        $size_data = $size_stmt->fetch(PDO::FETCH_ASSOC);
+        $target_file_size = $size_data['file_size'] ?? 0;
+        
+        if ($target_file_size > 0) {
+            // Search for file by size
+            $search_dirs = [
+                $base_dir . '/uploads/audio/',
+                $base_dir . '/uploads/music/',
+                $base_dir . '/music/',
+                $base_dir . '/uploads/',
+            ];
+            
+            $found_file = false;
+            foreach ($search_dirs as $search_dir) {
+                if (!is_dir($search_dir)) {
+                    continue;
+                }
+                
+                $iterator = new RecursiveIteratorIterator(
+                    new RecursiveDirectoryIterator($search_dir, RecursiveDirectoryIterator::SKIP_DOTS),
+                    RecursiveIteratorIterator::SELF_FIRST
+                );
+                
+                foreach ($iterator as $file) {
+                    if ($file->isFile()) {
+                        $actual_size = $file->getSize();
+                        $size_diff = abs($actual_size - $target_file_size);
+                        
+                        // Match if size is within 1KB tolerance
+                        if ($size_diff <= 1024) {
+                            $ext = strtolower($file->getExtension());
+                            $audio_extensions = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'oga', 'webm'];
+                            
+                            if (in_array($ext, $audio_extensions)) {
+                                $full_path = $file->getRealPath();
+                                $relative_path = str_replace('\\', '/', str_replace($base_dir . '/', '', $full_path));
+                                $relative_path = ltrim($relative_path, '/');
+                                
+                                // Update database with found path
+                                $update_stmt = $conn->prepare("UPDATE songs SET file_path = ? WHERE id = ?");
+                                $update_stmt->execute([$relative_path, $song_id]);
+                                
+                                $audio_file = $relative_path;
+                                $found_file = true;
+                                break 2;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (!$found_file) {
+                header('Content-Type: audio/mpeg');
+                header('Content-Length: 0');
+                exit;
+            }
+        } else {
+            header('Content-Type: audio/mpeg');
+            header('Content-Length: 0');
+            exit;
+        }
+    }
+    
+    // Normalize path
+    $audio_file = str_replace('\\', '/', trim($audio_file));
+    $audio_file = ltrim($audio_file, '/');
     
     // Try to find the file - check uploads/audio first
     $possible_paths = [
@@ -316,4 +378,3 @@ try {
     exit;
 }
 // NO closing PHP tag - prevents trailing whitespace that breaks audio!
-
