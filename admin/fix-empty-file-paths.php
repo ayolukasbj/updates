@@ -32,14 +32,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fix_paths'])) {
         $fixed_count = 0;
         $not_found_count = 0;
         
-        // Common directories to search
+        // Common directories to search - expanded list
         $search_dirs = [
             $base_dir . '/uploads/audio/',
             $base_dir . '/uploads/music/',
             $base_dir . '/music/',
             $base_dir . '/uploads/',
+            $base_dir . '/audio/',
+            $base_dir . '/songs/',
+            $base_dir . '/files/',
             $base_dir . '/'
         ];
+        
+        // Also check if there's a specific upload directory based on song ID or date
+        foreach ($songs as $song) {
+            $upload_date = $song['upload_date'] ?? $song['created_at'] ?? null;
+            if ($upload_date) {
+                $year = date('Y', strtotime($upload_date));
+                $month = date('m', strtotime($upload_date));
+                $search_dirs[] = $base_dir . '/uploads/' . $year . '/';
+                $search_dirs[] = $base_dir . '/uploads/' . $year . '/' . $month . '/';
+            }
+        }
+        $search_dirs = array_unique($search_dirs);
         
         foreach ($songs as $song) {
             $song_id = $song['id'];
@@ -65,8 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fix_paths'])) {
                         $actual_size = $file->getSize();
                         $size_diff = abs($actual_size - $file_size);
                         
-                        // Match if size is within 1KB tolerance
-                        if ($size_diff <= 1024) {
+                        // Match if size is within 5KB tolerance (more lenient)
+                        if ($size_diff <= 5120) {
                             // Check if it's an audio file
                             $ext = strtolower($file->getExtension());
                             $audio_extensions = ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'oga', 'webm'];
@@ -240,4 +255,5 @@ include 'includes/header.php';
 </div>
 
 <?php include 'includes/footer.php'; ?>
+
 
